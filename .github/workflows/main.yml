@@ -36,15 +36,18 @@ jobs:
 
       - name: Build APK
         run: |
-          # Création du dossier assets et déplacement de l'icône par commande
+          # On s'assure que le dossier assets et l'icône sont là
           mkdir -p assets
           cp icon.png assets/icon.png
           
-          # Lancement du build
-          yes | flet build apk --project "Cortex AI" --build-number 2 --build-version 1.0.1 --keystore-path "mon-projet.keystore" \
-            --keystore-password "${{ secrets.KEYSTORE_PASSWORD }}" \
+          # La commande de build avec les bons paramètres
+          yes | flet build apk \
+            --project "Cortex AI" \
+            --build-number 2 \
+            --keystore-path "mon-projet.keystore" \
+            --keystore-password "ton_mot_de_passe" \
             --keystore-alias "ma-cle-cortex" \
-            --key-password "${{ secrets.KEYSTORE_PASSWORD }}"
+            --key-password "ton_mot_de_passe"
 
       
       - name: Upload APK
