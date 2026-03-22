@@ -21,6 +21,18 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+      
+      - name: Generer Keystore temporaire
+        run: |
+          keytool -genkey -noprompt \
+            -alias ma-cle-cortex \
+            -dname "CN=CortexAI, OU=Dev, O=Cortex, L=Paris, S=France, C=FR" \
+            -keystore mon-projet.keystore \
+            -storepass mon_mot_de_passe_secret \
+            -keypass mon_mot_de_passe_secret \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000
 
       - name: Build APK
         run: |
@@ -29,7 +41,10 @@ jobs:
           cp icon.png assets/icon.png
           
           # Lancement du build
-          yes | flet build apk --project "Cortex AI"
+          yes | flet build apk --project "Cortex AI" --build-number 2 --build-version 1.0.1 --keystore-path "mon-projet.keystore" \
+            --keystore-password "${{ secrets.KEYSTORE_PASSWORD }}" \
+            --keystore-alias "ma-cle-cortex" \
+            --key-password "${{ secrets.KEYSTORE_PASSWORD }}"
 
       
       - name: Upload APK
