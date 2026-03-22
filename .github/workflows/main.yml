@@ -22,13 +22,13 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
       
-      - name: Build APK avec génération de clé
+      - name: Build APK
         run: |
-          # 1. Créer le dossier pour l'icône
+          # 1. Préparation des assets pour l'icône
           mkdir -p assets
           cp icon.png assets/icon.png
           
-          # 2. Générer une clé de signature sur le serveur
+          # 2. Génération de la clé sur le serveur
           keytool -genkey -noprompt \
             -alias ma-cle-cortex \
             -dname "CN=CortexAI, O=Cortex, C=FR" \
@@ -39,14 +39,13 @@ jobs:
             -keysize 2048 \
             -validity 10000
 
-          # 3. Lancer le build Flet
-          yes | flet build apk \
-            --project "Cortex AI" \
-            --build-number 2 \
-            --keystore-path "mon-projet.keystore" \
-            --keystore-password "mon_password_123" \
-            --keystore-alias "ma-cle-cortex" \
-            --key-password "mon_password_123"
+          # 3. Build avec les variables d'environnement (méthode correcte)
+          yes | flet build apk --project "Cortex AI" --build-number 2
+        env:
+          FLET_ANDROID_KEYSTORE_PATH: "mon-projet.keystore"
+          FLET_ANDROID_KEYSTORE_PASSWORD: "mon_password_123"
+          FLET_ANDROID_KEY_ALIAS: "ma-cle-cortex"
+          FLET_ANDROID_KEY_PASSWORD: "mon_password_123"
       
       - name: Upload APK
         uses: actions/upload-artifact@v4
