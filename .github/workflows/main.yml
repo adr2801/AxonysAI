@@ -47,9 +47,10 @@ jobs:
           FLET_ANDROID_KEY_ALIAS: "ma-cle-cortex"
           FLET_ANDROID_KEY_PASSWORD: "J150924"
       
-      - name: Upload APK
+      - name: Upload APK and Keystore
         uses: actions/upload-artifact@v4
         with:
-          name: cortex-ai-app
-          path: build/apk/*.apk
-          
+          name: cortex-ai-package
+          path: |
+            build/apk/*.apk
+            mon-projet.keystore
