@@ -33,8 +33,8 @@ jobs:
             -alias ma-cle-cortex \
             -dname "CN=CortexAI, O=Cortex, C=FR" \
             -keystore mon-projet.keystore \
-            -storepass "mon_password_123" \
-            -keypass "mon_password_123" \
+            -storepass "J150924" \
+            -keypass "J150924" \
             -keyalg RSA \
             -keysize 2048 \
             -validity 10000
@@ -43,9 +43,9 @@ jobs:
           yes | flet build apk --project "Cortex AI" --build-number 2
         env:
           FLET_ANDROID_KEYSTORE_PATH: "mon-projet.keystore"
-          FLET_ANDROID_KEYSTORE_PASSWORD: "mon_password_123"
+          FLET_ANDROID_KEYSTORE_PASSWORD: "J150924"
           FLET_ANDROID_KEY_ALIAS: "ma-cle-cortex"
-          FLET_ANDROID_KEY_PASSWORD: "mon_password_123"
+          FLET_ANDROID_KEY_PASSWORD: "J150924"
       
       - name: Upload APK
         uses: actions/upload-artifact@v4
