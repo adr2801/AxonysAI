@@ -22,33 +22,31 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
       
-      - name: Generer Keystore temporaire
+      - name: Build APK avec génération de clé
         run: |
+          # 1. Créer le dossier pour l'icône
+          mkdir -p assets
+          cp icon.png assets/icon.png
+          
+          # 2. Générer une clé de signature sur le serveur
           keytool -genkey -noprompt \
             -alias ma-cle-cortex \
-            -dname "CN=CortexAI, OU=Dev, O=Cortex, L=Paris, S=France, C=FR" \
+            -dname "CN=CortexAI, O=Cortex, C=FR" \
             -keystore mon-projet.keystore \
-            -storepass mon_mot_de_passe_secret \
-            -keypass mon_mot_de_passe_secret \
+            -storepass "mon_password_123" \
+            -keypass "mon_password_123" \
             -keyalg RSA \
             -keysize 2048 \
             -validity 10000
 
-      - name: Build APK
-        run: |
-          # On s'assure que le dossier assets et l'icône sont là
-          mkdir -p assets
-          cp icon.png assets/icon.png
-          
-          # La commande de build avec les bons paramètres
+          # 3. Lancer le build Flet
           yes | flet build apk \
             --project "Cortex AI" \
             --build-number 2 \
             --keystore-path "mon-projet.keystore" \
-            --keystore-password "ton_mot_de_passe" \
+            --keystore-password "mon_password_123" \
             --keystore-alias "ma-cle-cortex" \
-            --key-password "ton_mot_de_passe"
-
+            --key-password "mon_password_123"
       
       - name: Upload APK
         uses: actions/upload-artifact@v4
