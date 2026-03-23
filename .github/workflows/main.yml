@@ -1,4 +1,4 @@
-name: Build Flet APK
+name: Build Cortex AI Update
 on: [push, pull_request]
 
 jobs:
@@ -7,28 +7,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install Flet and Dependencies
+      - name: Install Dependencies
         run: |
-          pip install flet numpy
+          pip install flet numpy requests
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-      
-      - name: Build APK
+
+      - name: Prepare Assets & Signature
         run: |
-          # 1. Préparation des assets pour l'icône
+          # 1. Dossier Assets pour l'icône
           mkdir -p assets
-          cp icon.png assets/icon.png
+          if [ -f "icon.png" ]; then cp icon.png assets/icon.png; fi
           
-          # 2. Génération de la clé sur le serveur
+          # 2. Génération du Keystore (Mot de passe : cortex123)
+          # IMPORTANT : Garde bien ce fichier précieusement pour les futures MAJ !
           keytool -genkey -noprompt \
             -alias ma-cle-cortex \
             -dname "CN=CortexAI, O=Cortex, C=FR" \
@@ -39,18 +40,24 @@ jobs:
             -keysize 2048 \
             -validity 10000
 
-          # 3. Build avec les variables d'environnement (méthode correcte)
-          yes | flet build apk --project "Cortex AI" --build-number 2
+      - name: Build Optimized APK (Version 2)
+        run: |
+          # --build-number 2 indique à Android que c'est une MAJ
+          # --target-arch arm64-v8a réduit la taille de l'APK
+          yes | flet build apk --project "Cortex AI" \
+            --build-number 2 \
+            --build-version 1.0.1 \
+            --target-arch arm64-v8a
         env:
           FLET_ANDROID_KEYSTORE_PATH: "mon-projet.keystore"
           FLET_ANDROID_KEYSTORE_PASSWORD: "J150924"
           FLET_ANDROID_KEY_ALIAS: "ma-cle-cortex"
           FLET_ANDROID_KEY_PASSWORD: "J150924"
-      
-      - name: Upload APK and Keystore
+
+      - name: Upload Package
         uses: actions/upload-artifact@v4
         with:
-          name: cortex-ai-package
+          name: cortex-ai-update-v2
           path: |
             build/apk/*.apk
             mon-projet.keystore
