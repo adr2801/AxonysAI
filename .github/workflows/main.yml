@@ -34,10 +34,10 @@ jobs:
           
           # --- TON KEYSTORE EXISTANT ---
           # Assure-toi que ce fichier est bien à la racine de ton GitHub
-          FLET_ANDROID_KEYSTORE_PATH: "ton-fichier.keystore" 
-          FLET_ANDROID_KEYSTORE_PASSWORD: "TON_MOT_DE_PASSE"
-          FLET_ANDROID_KEY_ALIAS: "TON_ALIAS"
-          FLET_ANDROID_KEY_PASSWORD: "TON_MOT_DE_PASSE_CLE"
+          FLET_ANDROID_KEYSTORE_PATH: "mon-projet.keystore" 
+          FLET_ANDROID_KEYSTORE_PASSWORD: "J150924"
+          FLET_ANDROID_KEY_ALIAS: "ma-cle-cortex"
+          FLET_ANDROID_KEY_PASSWORD: "J150924"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
