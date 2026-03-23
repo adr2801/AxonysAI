@@ -22,15 +22,19 @@ jobs:
 
       - name: Build Optimized APK (MAJ)
         run: |
-          # On utilise --build-number 2 pour la mise à jour
-          # On cible arm64-v8a pour réduire le poids de NumPy
-          yes | flet build apk --project "Cortex AI" \
-            --build-number 2 \
-            --target-arch arm64-v8a
+          # La commande reste très simple pour éviter les erreurs d'arguments
+          yes | flet build apk --project "Cortex AI"
         env:
-          # Ici, remplace par le NOM EXACT de ton fichier qui est sur ton GitHub
+          # --- CONFIGURATION DE LA MAJ ---
+          FLET_ANDROID_BUILD_NUMBER: "2"
+          FLET_ANDROID_BUILD_VERSION: "1.1.0"
+          
+          # --- OPTIMISATION DE TAILLE ---
+          FLET_ANDROID_TARGET_ARCH: "arm64-v8a"
+          
+          # --- TON KEYSTORE EXISTANT ---
+          # Assure-toi que ce fichier est bien à la racine de ton GitHub
           FLET_ANDROID_KEYSTORE_PATH: "ton-fichier.keystore" 
-          # Remplace par tes VRAIS mots de passe
           FLET_ANDROID_KEYSTORE_PASSWORD: "TON_MOT_DE_PASSE"
           FLET_ANDROID_KEY_ALIAS: "TON_ALIAS"
           FLET_ANDROID_KEY_PASSWORD: "TON_MOT_DE_PASSE_CLE"
