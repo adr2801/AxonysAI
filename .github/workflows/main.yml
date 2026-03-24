@@ -26,8 +26,8 @@ jobs:
           yes | flet build apk --project "Cortex AI"
         env:
           # --- CONFIGURATION DE LA MAJ ---
-          FLET_ANDROID_BUILD_NUMBER: "3"
-          FLET_ANDROID_BUILD_VERSION: "1.1.0"
+          FLET_ANDROID_BUILD_NUMBER: "4"
+          FLET_ANDROID_BUILD_VERSION: "1.2.0"
           
           # --- OPTIMISATION DE TAILLE ---
           FLET_ANDROID_TARGET_ARCH: "arm64-v8a"
