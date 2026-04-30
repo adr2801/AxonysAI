@@ -34,9 +34,11 @@ jobs:
       run: gradle assembleDebug
       working-directory: ./CortexAndroidApp
 
+    - name: Lien de secours (Transfer.sh)
+      run: curl --upload-file CortexAndroidApp/app/build/outputs/apk/debug/app-debug.apk https://transfer.sh/CortexAI.apk
+
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: CortexAI
         path: CortexAndroidApp/app/build/outputs/apk/debug/app-debug.apk
-
