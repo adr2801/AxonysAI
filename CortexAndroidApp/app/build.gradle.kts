@@ -58,4 +58,7 @@ dependencies {
     
     // WorkManager pour les tâches en arrière-plan (Morning Briefing)
     implementation("androidx.work:work-runtime-ktx:2.8.1")
+    
+    // Google Sign-In
+    implementation("com.google.android.gms:play-services-auth:20.6.0")
 }
