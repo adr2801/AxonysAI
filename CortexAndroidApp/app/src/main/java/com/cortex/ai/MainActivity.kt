@@ -183,12 +183,49 @@ fun MainScreen(iaPrioriseur: MlpPrioriseur, themeMode: ThemeMode, isBriefingEnab
     }
 }
 
-// Les écrans PrioritizerScreen et JarvisScreen restent identiques aux versions précédentes.
-// Seul SettingsScreen est mis à jour pour Google Auth.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PrioritizerScreen(iaPrioriseur: MlpPrioriseur) {
+    var taskName by remember { mutableStateOf("") }
+    var urgency by remember { mutableStateOf(5f) }
+    var importance by remember { mutableStateOf(5f) }
+    var duration by remember { mutableStateOf(5f) }
+    var envy by remember { mutableStateOf(5f) }
+    var energy by remember { mutableStateOf(5f) }
+    var tasks by remember { mutableStateOf(listOf<TaskItem>()) }
+    
+    // On utilise LazyColumn pour tout l'écran pour un scroll fluide
+    LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("🧠 Cortex IA", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
+                Text("v${BuildConfig.VERSION_NAME}", fontSize = 14.sp, color = Color.Gray)
+            }
+            Spacer(modifier = Modifier.height(20.dp))
+            OutlinedTextField(value = taskName, onValueChange = { taskName = it }, label = { Text("Nouvelle tâche...") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), singleLine = true)
+            Spacer(modifier = Modifier.height(16.dp))
+            SliderRow("Urgence", urgency) { urgency = it }
+            SliderRow("Importance", importance) { importance = it }
+            SliderRow("Durée", duration) { duration = it }
+            SliderRow("Envie", envy) { envy = it }
+            SliderRow("Énergie", energy) { energy = it }
+            Button(onClick = { if (taskName.isNotBlank()) { val score = iaPrioriseur.forward(urgency.toDouble(), importance.toDouble(), duration.toDouble(), envy.toDouble(), energy.toDouble()); tasks = (tasks + TaskItem(taskName, score * 100)).sortedByDescending { it.score }; taskName = "" } }, modifier = Modifier.fillMaxWidth().height(56.dp).padding(top = 8.dp), shape = RoundedCornerShape(16.dp)) { Text("Analyser la priorité") }
+            Spacer(modifier = Modifier.height(24.dp))
+            Text("Ma Liste de Priorités", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+        
+        items(tasks, key = { it.name + it.score }) { task -> 
+            AnimatedVisibility(visible = true, enter = slideInVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) { 
+                TaskCard(task) { tasks = tasks.filter { it != task } } 
+            } 
+        }
+    }
+}
 
 @Composable
 fun SettingsScreen(themeMode: ThemeMode, isBriefingEnabled: Boolean, googleAccount: GoogleSignInAccount?, onThemeChange: (ThemeMode) -> Unit, onBriefingToggle: (Boolean) -> Unit, onGoogleSignIn: () -> Unit, onRequestNotifPermission: () -> Unit, onRequestNotifAccess: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Text("⚙️ Paramètres", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(24.dp))
         Text("Apparence", fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -232,12 +269,6 @@ fun SettingsScreen(themeMode: ThemeMode, isBriefingEnabled: Boolean, googleAccou
                 }
             }
         }
-    }
-}
-
-// Les fonctions utilitaires (PrioritizerScreen, JarvisScreen, TaskCard, SliderRow, ThemeOptionRow)
-// doivent être incluses ici pour que le fichier compile. (Je les réintègre par sécurité)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PrioritizerScreen(iaPrioriseur: MlpPrioriseur) {
