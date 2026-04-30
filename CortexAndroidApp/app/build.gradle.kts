@@ -55,4 +55,7 @@ dependencies {
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4")
+    
+    // WorkManager pour les tâches en arrière-plan (Morning Briefing)
+    implementation("androidx.work:work-runtime-ktx:2.8.1")
 }
