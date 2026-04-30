@@ -136,7 +136,7 @@ class MainActivity : ComponentActivity() {
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
             .requestProfile()
-            .requestIdToken("449010615326-bn7o6ek8jau2kphiaof04nptkbvntokl.apps.googleusercontent.com")
+            .requestIdToken("449010615326-no35acatoa5cjp0jqdtsi1frncbne9th.apps.googleusercontent.com")
             .build()
         val client = GoogleSignIn.getClient(this, gso)
         googleSignInLauncher.launch(client.signInIntent)
