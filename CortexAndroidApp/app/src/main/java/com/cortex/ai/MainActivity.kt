@@ -1,5 +1,7 @@
 package com.cortex.ai
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -36,6 +38,39 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(iaPrioriseur: MlpPrioriseur) {
     var selectedTab by remember { mutableStateOf(0) }
+    var updateUrl by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    LaunchedEffect(Unit) {
+        try {
+            val release = JarvisApiClient.githubService.getLatestRelease()
+            val latestVersion = release.tag_name.replace("v", "")
+            if (latestVersion != BuildConfig.VERSION_NAME) {
+                updateUrl = release.html_url
+            }
+        } catch (e: Exception) {
+            // Pas d'internet ou erreur
+        }
+    }
+
+    if (updateUrl != null) {
+        AlertDialog(
+            onDismissRequest = { updateUrl = null },
+            title = { Text("Mise à jour disponible 🎉") },
+            text = { Text("Une nouvelle version de Cortex IA est disponible sur GitHub !") },
+            confirmButton = {
+                Button(onClick = {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(updateUrl))
+                    context.startActivity(intent)
+                    updateUrl = null
+                }) { Text("Mettre à jour") }
+            },
+            dismissButton = {
+                TextButton(onClick = { updateUrl = null }) { Text("Plus tard") }
+            }
+        )
+    }
 
     Scaffold(
         bottomBar = {
@@ -79,7 +114,10 @@ fun PrioritizerScreen(iaPrioriseur: MlpPrioriseur) {
     var tasks by remember { mutableStateOf(listOf<TaskItem>()) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("🧠 Cortex IA - Prioriseur", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4CAF50))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("🧠 Cortex IA", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4CAF50))
+            Text("v${BuildConfig.VERSION_NAME}", fontSize = 14.sp, color = Color.Gray)
+        }
         Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedTextField(
@@ -165,7 +203,10 @@ fun JarvisScreen() {
     val coroutineScope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("🤖 Jarvis - Centre de Commande", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4CAF50))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("🤖 Jarvis", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4CAF50))
+            Text("v${BuildConfig.VERSION_NAME}", fontSize = 14.sp, color = Color.Gray)
+        }
         Spacer(modifier = Modifier.height(16.dp))
 
         LazyColumn(modifier = Modifier.weight(1f)) {
