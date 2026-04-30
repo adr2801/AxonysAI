@@ -269,6 +269,7 @@ fun JarvisScreen(messages: List<ChatMessage>, onMessagesChange: (List<ChatMessag
     var input by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     Column(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(16.dp)) { Text("🤖 Jarvis", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) }
         LazyColumn(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
