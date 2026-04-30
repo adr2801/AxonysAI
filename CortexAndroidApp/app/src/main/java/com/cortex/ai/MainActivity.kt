@@ -35,6 +35,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(iaPrioriseur: MlpPrioriseur) {
     var selectedTab by remember { mutableStateOf(0) }
@@ -102,6 +103,7 @@ fun MainScreen(iaPrioriseur: MlpPrioriseur) {
 
 data class TaskItem(val name: String, val score: Double)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PrioritizerScreen(iaPrioriseur: MlpPrioriseur) {
     var taskName by remember { mutableStateOf("") }
@@ -195,6 +197,7 @@ fun SliderRow(label: String, value: Float, onValueChange: (Float) -> Unit) {
 
 data class ChatMessage(val text: String, val isUser: Boolean)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun JarvisScreen() {
     var input by remember { mutableStateOf("") }
