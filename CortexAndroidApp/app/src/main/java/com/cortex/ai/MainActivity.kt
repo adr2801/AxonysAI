@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
             handleSignInResult(account)
         } catch (e: ApiException) {
             Log.e("CortexAuth", "Google Sign-In failed: ${e.message}")
+            android.widget.Toast.makeText(this, "Erreur Google: ${e.statusCode}", android.widget.Toast.LENGTH_LONG).show()
         }
     }
 
@@ -71,14 +72,20 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
         val savedTheme = prefs.getString("theme_mode", ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name
         val briefingEnabled = prefs.getBoolean("briefing_enabled", false)
+        
+        // Charger l'historique du Chat
         val chatHistory = prefs.getString("chat_history", null)
         val initialMessages = if (chatHistory != null) {
-            try {
-                Gson().fromJson<List<ChatMessage>>(chatHistory, object : TypeToken<List<ChatMessage>>() {}.type)
-            } catch (e: Exception) {
-                listOf(ChatMessage("Bonjour Antoine. Les systèmes sont en ligne.", false))
-            }
+            try { Gson().fromJson<List<ChatMessage>>(chatHistory, object : TypeToken<List<ChatMessage>>() {}.type) }
+            catch (e: Exception) { listOf(ChatMessage("Bonjour Antoine. Les systèmes sont en ligne.", false)) }
         } else listOf(ChatMessage("Bonjour Antoine. Les systèmes sont en ligne.", false))
+
+        // Charger les Tâches priorisées
+        val savedTasks = prefs.getString("prioritized_tasks", null)
+        val initialTasks = if (savedTasks != null) {
+            try { Gson().fromJson<List<TaskItem>>(savedTasks, object : TypeToken<List<TaskItem>>() {}.type) }
+            catch (e: Exception) { listOf<TaskItem>() }
+        } else listOf<TaskItem>()
 
         val lastAccount = GoogleSignIn.getLastSignedInAccount(this)
 
@@ -86,6 +93,7 @@ class MainActivity : ComponentActivity() {
             var themeMode by remember { mutableStateOf(ThemeMode.valueOf(savedTheme)) }
             var isBriefingEnabled by remember { mutableStateOf(briefingEnabled) }
             var chatMessages by remember { mutableStateOf(initialMessages) }
+            var prioritizedTasks by remember { mutableStateOf(initialTasks) }
             var googleAccount by remember { mutableStateOf(lastAccount) }
             
             onAuthSuccess = { googleAccount = GoogleSignIn.getLastSignedInAccount(this) }
@@ -109,10 +117,12 @@ class MainActivity : ComponentActivity() {
                         themeMode = themeMode,
                         isBriefingEnabled = isBriefingEnabled,
                         chatMessages = chatMessages,
+                        prioritizedTasks = prioritizedTasks,
                         googleAccount = googleAccount,
                         onThemeChange = { themeMode = it; prefs.edit().putString("theme_mode", it.name).apply() },
                         onBriefingToggle = { isBriefingEnabled = it; prefs.edit().putBoolean("briefing_enabled", it).apply(); toggleBriefingWorker(it) },
                         onMessagesChange = { chatMessages = it; prefs.edit().putString("chat_history", Gson().toJson(it)).apply() },
+                        onTasksChange = { prioritizedTasks = it; prefs.edit().putString("prioritized_tasks", Gson().toJson(it)).apply() },
                         onGoogleSignIn = { startGoogleSignIn() },
                         onRequestNotifPermission = { checkAndRequestNotifPermission() },
                         onRequestNotifAccess = { openNotificationAccessSettings() }
@@ -135,9 +145,15 @@ class MainActivity : ComponentActivity() {
     private fun handleSignInResult(account: GoogleSignInAccount?) {
         if (account != null) {
             val idToken = account.idToken
+            Log.d("CortexAuth", "Success: ${account.displayName}, Token present: ${idToken != null}")
+            
             val prefs = getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
             prefs.edit().putString("google_id_token", idToken).apply()
+            
+            android.widget.Toast.makeText(this, "Connecté : ${account.displayName}", android.widget.Toast.LENGTH_SHORT).show()
             onAuthSuccess?.invoke(account.displayName ?: "")
+        } else {
+            android.widget.Toast.makeText(this, "Erreur : Compte non récupéré", android.widget.Toast.LENGTH_LONG).show()
         }
     }
 
@@ -169,10 +185,12 @@ fun MainScreen(
     themeMode: ThemeMode, 
     isBriefingEnabled: Boolean, 
     chatMessages: List<ChatMessage>, 
+    prioritizedTasks: List<TaskItem>,
     googleAccount: GoogleSignInAccount?, 
     onThemeChange: (ThemeMode) -> Unit, 
     onBriefingToggle: (Boolean) -> Unit, 
     onMessagesChange: (List<ChatMessage>) -> Unit, 
+    onTasksChange: (List<TaskItem>) -> Unit,
     onGoogleSignIn: () -> Unit, 
     onRequestNotifPermission: () -> Unit, 
     onRequestNotifAccess: () -> Unit
@@ -217,7 +235,7 @@ fun MainScreen(
         Box(modifier = Modifier.padding(paddingValues)) {
             Crossfade(targetState = selectedTab, animationSpec = tween(300)) { tab ->
                 when (tab) {
-                    0 -> PrioritizerScreen(iaPrioriseur)
+                    0 -> PrioritizerScreen(iaPrioriseur, prioritizedTasks, onTasksChange)
                     1 -> JarvisScreen(chatMessages, onMessagesChange)
                     2 -> SettingsScreen(themeMode, isBriefingEnabled, googleAccount, onThemeChange, onBriefingToggle, onGoogleSignIn, onRequestNotifPermission, onRequestNotifAccess)
                 }
@@ -228,14 +246,13 @@ fun MainScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PrioritizerScreen(iaPrioriseur: MlpPrioriseur) {
+fun PrioritizerScreen(iaPrioriseur: MlpPrioriseur, tasks: List<TaskItem>, onTasksChange: (List<TaskItem>) -> Unit) {
     var taskName by remember { mutableStateOf("") }
     var urgency by remember { mutableStateOf(5f) }
     var importance by remember { mutableStateOf(5f) }
     var duration by remember { mutableStateOf(5f) }
     var envy by remember { mutableStateOf(5f) }
     var energy by remember { mutableStateOf(5f) }
-    var tasks by remember { mutableStateOf(listOf<TaskItem>()) }
     
     LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
@@ -251,14 +268,19 @@ fun PrioritizerScreen(iaPrioriseur: MlpPrioriseur) {
             SliderRow("Durée", duration) { duration = it }
             SliderRow("Envie", envy) { envy = it }
             SliderRow("Énergie", energy) { energy = it }
-            Button(onClick = { if (taskName.isNotBlank()) { val score = iaPrioriseur.forward(urgency.toDouble(), importance.toDouble(), duration.toDouble(), envy.toDouble(), energy.toDouble()); tasks = (tasks + TaskItem(taskName, score * 100)).sortedByDescending { it.score }; taskName = "" } }, modifier = Modifier.fillMaxWidth().height(56.dp).padding(top = 8.dp), shape = RoundedCornerShape(16.dp)) { Text("Analyser la priorité") }
+            Button(onClick = { if (taskName.isNotBlank()) { 
+                val score = iaPrioriseur.forward(urgency.toDouble(), importance.toDouble(), duration.toDouble(), envy.toDouble(), energy.toDouble())
+                val newList = (tasks + TaskItem(taskName, score * 100)).sortedByDescending { it.score }
+                onTasksChange(newList)
+                taskName = "" 
+            } }, modifier = Modifier.fillMaxWidth().height(56.dp).padding(top = 8.dp), shape = RoundedCornerShape(16.dp)) { Text("Analyser la priorité") }
             Spacer(modifier = Modifier.height(24.dp))
             Text("Ma Liste de Priorités", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(modifier = Modifier.height(8.dp))
         }
         items(tasks, key = { it.name + it.score }) { task ->
             AnimatedVisibility(visible = true, enter = slideInVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
-                TaskCard(task) { tasks = tasks.filter { it != task } }
+                TaskCard(task) { onTasksChange(tasks.filter { it != task }) }
             }
         }
     }
@@ -305,7 +327,13 @@ fun JarvisScreen(messages: List<ChatMessage>, onMessagesChange: (List<ChatMessag
                             val response = JarvisApiClient.apiService.sendMessage(ChatRequest(userMsg, token))
                             onMessagesChange(newMessages + ChatMessage(response.response ?: response.text ?: "Aucune réponse.", false))
                         } catch (e: Exception) {
-                            onMessagesChange(newMessages + ChatMessage("Erreur", false, true))
+                            val errorMsg = when(e) {
+                                is java.net.UnknownHostException -> "Serveur introuvable. Vérifie l'URL ou ta connexion."
+                                is java.net.SocketTimeoutException -> "Le serveur met trop de temps à répondre (Hugging Face dort ?)."
+                                is retrofit2.HttpException -> "Erreur serveur : ${e.code()} ${e.message()}"
+                                else -> "Erreur : ${e.localizedMessage ?: "Inconnue"}"
+                            }
+                            onMessagesChange(newMessages + ChatMessage(errorMsg, false, true))
                         } finally { isLoading = false }
                     }
                 }
