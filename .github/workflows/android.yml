@@ -34,6 +34,10 @@ jobs:
       with:
         gradle-version: '8.7'
 
+    - name: Get SHA-1 Fingerprint
+      run: gradle signingReport
+      working-directory: ./CortexAndroidApp
+
     - name: Build with Gradle
       run: gradle assembleDebug
       working-directory: ./CortexAndroidApp
@@ -41,7 +45,7 @@ jobs:
     - name: Publier sur la page Releases (Pas de quota)
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: "v1.0"
+        tag_name: "v1.0.1"
         name: "Cortex IA (Application Android)"
         body: "Téléchargez l'application Cortex IA directement depuis cette page !"
         files: CortexAndroidApp/app/build/outputs/apk/debug/app-debug.apk
