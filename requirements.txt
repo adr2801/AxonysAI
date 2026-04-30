@@ -1,3 +1,10 @@
-flet>=0.21.0
-numpy>=1.24.0
-requests>=2.31.0
+fastapi
+uvicorn
+crewai[google-genai]
+crewai_tools
+python-dotenv
+pydantic
+langchain
+langchain-community
+google-generativeai
+sentence-transformers
