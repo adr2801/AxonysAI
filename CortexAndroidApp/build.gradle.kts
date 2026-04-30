@@ -1,8 +1,3 @@
-buildscript {
-    ext {
-        set("compose_version", "1.4.3")
-    }
-}
 
 plugins {
     id("com.android.application") version "8.0.2" apply false
