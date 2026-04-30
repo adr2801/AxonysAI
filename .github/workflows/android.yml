@@ -34,7 +34,7 @@ jobs:
       working-directory: ./CortexAndroidApp
 
     - name: Upload APK
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: app-debug
-        path: CortexAndroidApp/app/build/outputs/apk/debug/app-debug.apk
+        name: CortexAI
+        path: CortexAndroidApp/app/build/outputs/apk/debug/CortexAI.apk
