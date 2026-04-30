@@ -8,6 +8,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    
+    # On donne la permission au script de créer une Release sur GitHub
+    permissions:
+      contents: write
 
     steps:
     - uses: actions/checkout@v4
@@ -34,14 +38,13 @@ jobs:
       run: gradle assembleDebug
       working-directory: ./CortexAndroidApp
 
-    - name: Lien de secours 1 (file.io)
-      run: curl -F "file=@CortexAndroidApp/app/build/outputs/apk/debug/app-debug.apk" https://file.io/?expires=1d
-
-    - name: Lien de secours 2 (bashupload)
-      run: curl bashupload.com -T CortexAndroidApp/app/build/outputs/apk/debug/app-debug.apk
-
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
+    - name: Publier sur la page Releases (Pas de quota)
+      uses: softprops/action-gh-release@v2
       with:
-        name: CortexAI
-        path: CortexAndroidApp/app/build/outputs/apk/debug/app-debug.apk
+        tag_name: "v1.0"
+        name: "Cortex IA (Application Android)"
+        body: "Téléchargez l'application Cortex IA directement depuis cette page !"
+        files: CortexAndroidApp/app/build/outputs/apk/debug/app-debug.apk
+        prerelease: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
