@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -78,7 +79,7 @@ class MainActivity : ComponentActivity() {
         val savedTheme = prefs.getString("theme_mode", ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name
         val briefingEnabled = prefs.getBoolean("briefing_enabled", false)
         
-        val chatHistory = prefs.getString("chat_history", null)P
+        val chatHistory = prefs.getString("chat_history", null)
         val initialMessages = if (chatHistory != null) {
             try { Gson().fromJson<List<ChatMessage>>(chatHistory, object : TypeToken<List<ChatMessage>>() {}.type) }
             catch (e: Exception) { listOf(ChatMessage("Bonjour Antoine. Les systèmes sont en ligne.", false)) }
