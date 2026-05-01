@@ -14,10 +14,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -38,6 +39,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.Scope
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.launch
@@ -59,7 +61,7 @@ class MainActivity : ComponentActivity() {
             val account = task.getResult(ApiException::class.java)
             handleSignInResult(account)
         } catch (e: ApiException) {
-            Log.e("CortexAuth", "Google Sign-In failed: ${e.message}")
+            Log.e("CortexAuth", "Google Sign-In failed: ${e.statusCode}")
             android.widget.Toast.makeText(this, "Erreur Google: ${e.statusCode}", android.widget.Toast.LENGTH_LONG).show()
         }
     }
@@ -74,14 +76,12 @@ class MainActivity : ComponentActivity() {
         val savedTheme = prefs.getString("theme_mode", ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name
         val briefingEnabled = prefs.getBoolean("briefing_enabled", false)
         
-        // Charger l'historique du Chat
         val chatHistory = prefs.getString("chat_history", null)
         val initialMessages = if (chatHistory != null) {
             try { Gson().fromJson<List<ChatMessage>>(chatHistory, object : TypeToken<List<ChatMessage>>() {}.type) }
             catch (e: Exception) { listOf(ChatMessage("Bonjour Antoine. Les systèmes sont en ligne.", false)) }
         } else listOf(ChatMessage("Bonjour Antoine. Les systèmes sont en ligne.", false))
 
-        // Charger les Tâches priorisées
         val savedTasks = prefs.getString("prioritized_tasks", null)
         val initialTasks = if (savedTasks != null) {
             try { Gson().fromJson<List<TaskItem>>(savedTasks, object : TypeToken<List<TaskItem>>() {}.type) }
@@ -125,6 +125,7 @@ class MainActivity : ComponentActivity() {
                         onMessagesChange = { chatMessages = it; prefs.edit().putString("chat_history", Gson().toJson(it)).apply() },
                         onTasksChange = { prioritizedTasks = it; prefs.edit().putString("prioritized_tasks", Gson().toJson(it)).apply() },
                         onGoogleSignIn = { startGoogleSignIn() },
+                        onGoogleSignOut = { signOutGoogle() },
                         onRequestNotifPermission = { checkAndRequestNotifPermission() },
                         onRequestNotifAccess = { openNotificationAccessSettings() }
                     )
@@ -137,6 +138,8 @@ class MainActivity : ComponentActivity() {
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
             .requestProfile()
+            .requestScopes(Scope("https://www.googleapis.com/auth/gmail.modify"))
+            .requestScopes(Scope("https://www.googleapis.com/auth/calendar"))
             .requestIdToken("449010615326-bn7o6ek8jau2kphiaof04nptkbvntokl.apps.googleusercontent.com")
             .build()
         val client = GoogleSignIn.getClient(this, gso)
@@ -145,16 +148,20 @@ class MainActivity : ComponentActivity() {
 
     private fun handleSignInResult(account: GoogleSignInAccount?) {
         if (account != null) {
-            val idToken = account.idToken
-            Log.d("CortexAuth", "Success: ${account.displayName}, Token present: ${idToken != null}")
-            
             val prefs = getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
-            prefs.edit().putString("google_id_token", idToken).apply()
-            
+            prefs.edit().putString("google_id_token", account.idToken).apply()
             android.widget.Toast.makeText(this, "Connecté : ${account.displayName}", android.widget.Toast.LENGTH_SHORT).show()
             onAuthSuccess?.invoke(account.displayName ?: "")
-        } else {
-            android.widget.Toast.makeText(this, "Erreur : Compte non récupéré", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun signOutGoogle() {
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).build()
+        val client = GoogleSignIn.getClient(this, gso)
+        client.signOut().addOnCompleteListener {
+            val prefs = getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
+            prefs.edit().remove("google_id_token").apply()
+            recreate() 
         }
     }
 
@@ -182,19 +189,12 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
-    iaPrioriseur: MlpPrioriseur, 
-    themeMode: ThemeMode, 
-    isBriefingEnabled: Boolean, 
-    chatMessages: List<ChatMessage>, 
-    prioritizedTasks: List<TaskItem>,
-    googleAccount: GoogleSignInAccount?, 
-    onThemeChange: (ThemeMode) -> Unit, 
-    onBriefingToggle: (Boolean) -> Unit, 
-    onMessagesChange: (List<ChatMessage>) -> Unit, 
-    onTasksChange: (List<TaskItem>) -> Unit,
-    onGoogleSignIn: () -> Unit, 
-    onRequestNotifPermission: () -> Unit, 
-    onRequestNotifAccess: () -> Unit
+    iaPrioriseur: MlpPrioriseur, themeMode: ThemeMode, isBriefingEnabled: Boolean, 
+    chatMessages: List<ChatMessage>, prioritizedTasks: List<TaskItem>,
+    googleAccount: GoogleSignInAccount?, onThemeChange: (ThemeMode) -> Unit, 
+    onBriefingToggle: (Boolean) -> Unit, onMessagesChange: (List<ChatMessage>) -> Unit, 
+    onTasksChange: (List<TaskItem>) -> Unit, onGoogleSignIn: () -> Unit, 
+    onGoogleSignOut: () -> Unit, onRequestNotifPermission: () -> Unit, onRequestNotifAccess: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(0) }
     var updateUrl by remember { mutableStateOf<String?>(null) }
@@ -238,7 +238,7 @@ fun MainScreen(
                 when (tab) {
                     0 -> PrioritizerScreen(iaPrioriseur, prioritizedTasks, onTasksChange)
                     1 -> JarvisScreen(chatMessages, onMessagesChange)
-                    2 -> SettingsScreen(themeMode, isBriefingEnabled, googleAccount, onThemeChange, onBriefingToggle, onGoogleSignIn, onRequestNotifPermission, onRequestNotifAccess)
+                    2 -> SettingsScreen(themeMode, isBriefingEnabled, googleAccount, onThemeChange, onBriefingToggle, onGoogleSignIn, onGoogleSignOut, onRequestNotifPermission, onRequestNotifAccess)
                 }
             }
         }
@@ -287,7 +287,7 @@ fun PrioritizerScreen(iaPrioriseur: MlpPrioriseur, tasks: List<TaskItem>, onTask
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun JarvisScreen(messages: List<ChatMessage>, onMessagesChange: (List<ChatMessage>) -> Unit) {
     var input by remember { mutableStateOf("") }
@@ -307,17 +307,14 @@ fun JarvisScreen(messages: List<ChatMessage>, onMessagesChange: (List<ChatMessag
                     Surface(
                         shape = RoundedCornerShape(16.dp), 
                         color = bubbleColor, 
-                        modifier = Modifier
-                            .fillMaxWidth(0.85f)
-                            .combinedClickable(
-                                onClick = { /* Ne rien faire sur un clic simple */ },
-                                onLongClick = { 
-                                    // Supprimer ce message précis
-                                    val newList = messages.toMutableList()
-                                    newList.removeAt(messages.indexOf(msg))
-                                    onMessagesChange(newList)
-                                }
-                            )
+                        modifier = Modifier.fillMaxWidth(0.85f).combinedClickable(
+                            onClick = { },
+                            onLongClick = { 
+                                val newList = messages.toMutableList()
+                                newList.removeAt(messages.indexOf(msg))
+                                onMessagesChange(newList)
+                            }
+                        )
                     ) {
                         Text(msg.text, modifier = Modifier.padding(14.dp), color = if (msg.isUser || msg.isError) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -358,7 +355,7 @@ fun JarvisScreen(messages: List<ChatMessage>, onMessagesChange: (List<ChatMessag
 }
 
 @Composable
-fun SettingsScreen(themeMode: ThemeMode, isBriefingEnabled: Boolean, googleAccount: GoogleSignInAccount?, onThemeChange: (ThemeMode) -> Unit, onBriefingToggle: (Boolean) -> Unit, onGoogleSignIn: () -> Unit, onRequestNotifPermission: () -> Unit, onRequestNotifAccess: () -> Unit) {
+fun SettingsScreen(themeMode: ThemeMode, isBriefingEnabled: Boolean, googleAccount: GoogleSignInAccount?, onThemeChange: (ThemeMode) -> Unit, onBriefingToggle: (Boolean) -> Unit, onGoogleSignIn: () -> Unit, onGoogleSignOut: () -> Unit, onRequestNotifPermission: () -> Unit, onRequestNotifAccess: () -> Unit) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
         Text("⚙️ Paramètres", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
         Spacer(modifier = Modifier.height(24.dp))
@@ -393,6 +390,8 @@ fun SettingsScreen(themeMode: ThemeMode, isBriefingEnabled: Boolean, googleAccou
                     Text("Connecté en tant que :", fontSize = 12.sp, color = Color.Gray)
                     Text(googleAccount.displayName ?: "Utilisateur Google", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Text(googleAccount.email ?: "", fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(onClick = onGoogleSignOut, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer)) { Text("Se déconnecter") }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("Jarvis a accès à votre Workspace.", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                 } else {
