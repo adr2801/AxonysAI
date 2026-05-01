@@ -149,17 +149,13 @@ class MainActivity : ComponentActivity() {
 
     private fun handleSignInResult(account: GoogleSignInAccount?) {
         if (account != null) {
-            // On récupère le VRAI Access Token OAuth2 en arrière-plan
             val scope = "oauth2:https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/calendar"
             
             lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 try {
-                    // On invalide l'ancien token au cas où pour en avoir un tout neuf
-                    account.idToken?.let { com.google.android.gms.auth.GoogleAuthUtil.invalidateToken(this@MainActivity, it) }
-                    
                     val token = com.google.android.gms.auth.GoogleAuthUtil.getToken(
                         this@MainActivity, 
-                        account.account ?: com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(this@MainActivity)?.account!!, 
+                        account.account!!, 
                         scope
                     )
                     
@@ -172,8 +168,9 @@ class MainActivity : ComponentActivity() {
                     }
                 } catch (e: Exception) {
                     Log.e("CortexAuth", "Erreur AccessToken: ${e.message}")
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        android.widget.Toast.makeText(this@MainActivity, "Erreur d'accès Workspace", android.widget.Toast.LENGTH_SHORT).show()
+                    // Si l'erreur est liée à une interaction utilisateur requise
+                    if (e is com.google.android.gms.auth.UserRecoverableAuthException) {
+                        googleSignInLauncher.launch(e.intent)
                     }
                 }
             }
