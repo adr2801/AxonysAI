@@ -6,7 +6,7 @@ import retrofit2.http.Body
 import retrofit2.http.POST
 
 // Modèles de données
-data class ChatRequest(val prompt: String, val google_token: String? = null)
+data class ChatRequest(val prompt: String, val google_token: String? = null, val user_name: String? = "Antoine")
 data class ChatResponse(val response: String?, val text: String?)
 data class GithubRelease(val tag_name: String, val html_url: String)
 

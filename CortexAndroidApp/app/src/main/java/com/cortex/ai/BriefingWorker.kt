@@ -2,7 +2,9 @@ package com.cortex.ai
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
@@ -14,17 +16,18 @@ class BriefingWorker(context: Context, params: WorkerParameters) : CoroutineWork
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            val recentNotifs = NotificationService.getRecentNotifications()
-            val prompt = "Generate a comprehensive morning briefing for Antoine by analyzing these recent notifications: $recentNotifs"
-            
             val prefs = applicationContext.getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
             val token = prefs.getString("google_id_token", null)
+            val name = prefs.getString("user_name", "Antoine") // On récupère le nom sauvegardé
+            
+            val recentNotifs = NotificationService.getRecentNotifications()
+            val prompt = "Génère un briefing matinal complet pour $name en analysant ces notifications récentes : $recentNotifs. Sois poli et efficace comme un majordome britannique."
             
             // Appel API Jarvis (avec le jeton pour accéder au Calendrier/Gmail)
-            val response = JarvisApiClient.apiService.sendMessage(ChatRequest(prompt, token))
+            val response = JarvisApiClient.apiService.sendMessage(ChatRequest(prompt, token, name))
             val briefing = response.response ?: response.text ?: "Impossible de générer le briefing."
 
-            showNotification("Ton Briefing Jarvis ☕", briefing)
+            showNotification("☕ Ton Briefing Jarvis, $name", briefing)
             
             Result.success()
         } catch (e: Exception) {
@@ -37,16 +40,30 @@ class BriefingWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val channelId = "cortex_briefing"
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(channelId, "Morning Briefing", NotificationManager.IMPORTANCE_DEFAULT)
+            val channel = NotificationChannel(channelId, "Morning Briefing", NotificationManager.IMPORTANCE_HIGH)
             notificationManager.createNotificationChannel(channel)
         }
+
+        // Création de l'intent pour ouvrir l'application au clic
+        val intent = Intent(applicationContext, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        
+        val pendingIntent = PendingIntent.getActivity(
+            applicationContext, 
+            0, 
+            intent, 
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+        )
 
         val notification = NotificationCompat.Builder(applicationContext, channelId)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(message)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .setAutoCancel(true)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message)) // Pour voir tout le texte
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent) // Ouvre l'app au clic
+            .setAutoCancel(true) // Disparaît quand on clique dessus
             .build()
 
         notificationManager.notify(1001, notification)

@@ -20,6 +20,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -77,7 +78,7 @@ class MainActivity : ComponentActivity() {
         val savedTheme = prefs.getString("theme_mode", ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name
         val briefingEnabled = prefs.getBoolean("briefing_enabled", false)
         
-        val chatHistory = prefs.getString("chat_history", null)
+        val chatHistory = prefs.getString("chat_history", null)P
         val initialMessages = if (chatHistory != null) {
             try { Gson().fromJson<List<ChatMessage>>(chatHistory, object : TypeToken<List<ChatMessage>>() {}.type) }
             catch (e: Exception) { listOf(ChatMessage("Bonjour Antoine. Les systèmes sont en ligne.", false)) }
@@ -106,11 +107,29 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
             }
             
-            val colorScheme = if (isDark) {
-                darkColorScheme(primary = Color(0xFF00E676), background = Color(0xFF121212), surface = Color(0xFF1E1E1E))
-            } else {
-                lightColorScheme(primary = Color(0xFF00C853), background = Color(0xFFF5F5F5), surface = Color.White)
-            }
+            val darkColors = darkColorScheme(
+                primary = Color(0xFF64B5F6),
+                secondary = Color(0xFF9575CD),
+                background = Color(0xFF0F111A),
+                surface = Color(0xFF1A1D2E),
+                onPrimary = Color.Black,
+                onBackground = Color.White,
+                onSurface = Color.White,
+                primaryContainer = Color(0xFF22283D),
+                surfaceVariant = Color(0xFF2C314D)
+            )
+
+            val lightColors = lightColorScheme(
+                primary = Color(0xFF1976D2),
+                secondary = Color(0xFF673AB7),
+                background = Color(0xFFF5F7FA),
+                surface = Color.White,
+                onPrimary = Color.White,
+                onBackground = Color(0xFF1A1C1E),
+                onSurface = Color(0xFF1A1C1E)
+            )
+            
+            val colorScheme = if (isDark) darkColors else lightColors
 
             MaterialTheme(colorScheme = colorScheme) {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -161,6 +180,7 @@ class MainActivity : ComponentActivity() {
                     
                     val prefs = getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
                     prefs.edit().putString("google_id_token", token).apply()
+                    prefs.edit().putString("user_name", account.displayName ?: "Antoine").apply()
                     
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                         android.widget.Toast.makeText(this@MainActivity, "Accès Workspace activé !", android.widget.Toast.LENGTH_SHORT).show()
@@ -168,7 +188,6 @@ class MainActivity : ComponentActivity() {
                     }
                 } catch (e: Exception) {
                     Log.e("CortexAuth", "Erreur AccessToken: ${e.message}")
-                    // Si l'erreur est liée à une interaction utilisateur requise
                     if (e is com.google.android.gms.auth.UserRecoverableAuthException) {
                         googleSignInLauncher.launch(e.intent)
                     }
@@ -248,18 +267,25 @@ fun MainScreen(
 
     Scaffold(
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                NavigationBarItem(selected = selectedTab == 0, onClick = { selectedTab = 0 }, icon = { Text("📋") }, label = { Text("Priorités") })
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surface, tonalElevation = 8.dp) {
+                NavigationBarItem(selected = selectedTab == 0, onClick = { selectedTab = 0 }, icon = { Text("📋") }, label = { Text("Focus") })
                 NavigationBarItem(selected = selectedTab == 1, onClick = { selectedTab = 1 }, icon = { Text("🤖") }, label = { Text("Jarvis") })
                 NavigationBarItem(selected = selectedTab == 2, onClick = { selectedTab = 2 }, icon = { Text("⚙️") }, label = { Text("Paramètres") })
             }
         }
-    ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues)) {
-            Crossfade(targetState = selectedTab, animationSpec = tween(300)) { tab ->
+    ) { padding ->
+        Box(modifier = Modifier
+            .fillMaxSize()
+            .padding(padding)
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(Color(0xFF0F111A), Color(0xFF1A1D2E))
+                )
+            )) {
+            Crossfade(targetState = selectedTab, animationSpec = tween(400)) { tab ->
                 when (tab) {
                     0 -> PrioritizerScreen(iaPrioriseur, prioritizedTasks, onTasksChange)
-                    1 -> JarvisScreen(chatMessages, onMessagesChange)
+                    1 -> JarvisScreen(chatMessages, googleAccount, onMessagesChange)
                     2 -> SettingsScreen(themeMode, isBriefingEnabled, googleAccount, onThemeChange, onBriefingToggle, onGoogleSignIn, onGoogleSignOut, onRequestNotifPermission, onRequestNotifAccess)
                 }
             }
@@ -309,69 +335,119 @@ fun PrioritizerScreen(iaPrioriseur: MlpPrioriseur, tasks: List<TaskItem>, onTask
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun JarvisScreen(messages: List<ChatMessage>, onMessagesChange: (List<ChatMessage>) -> Unit) {
+fun JarvisScreen(messages: List<ChatMessage>, googleAccount: GoogleSignInAccount?, onMessagesChange: (List<ChatMessage>) -> Unit) {
     var input by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     
-    Column(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(16.dp)) {
-            Text("🤖 Jarvis", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(messages.size - 1)
         }
-        LazyColumn(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
+    }
+    
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Box(modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(24.dp)) {
+            Text("JARVIS", fontSize = 28.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp, color = MaterialTheme.colorScheme.primary)
+        }
+        LazyColumn(state = listState, modifier = Modifier.weight(1f).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(messages) { msg ->
                 val align = if (msg.isUser) Alignment.CenterEnd else Alignment.CenterStart
-                val bubbleColor = if (msg.isError) Color(0xFFD32F2F) else if (msg.isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                Box(contentAlignment = align, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                val bubbleColor = if (msg.isError) Color(0xFFD32F2F) 
+                                 else if (msg.isUser) MaterialTheme.colorScheme.primary 
+                                 else MaterialTheme.colorScheme.surfaceVariant
+                val textColor = if (msg.isUser) Color.Black else MaterialTheme.colorScheme.onSurface
+                
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = align) {
                     Surface(
-                        shape = RoundedCornerShape(16.dp), 
-                        color = bubbleColor, 
-                        modifier = Modifier.fillMaxWidth(0.85f).combinedClickable(
-                            onClick = { },
-                            onLongClick = { 
-                                val newList = messages.toMutableList()
-                                newList.removeAt(messages.indexOf(msg))
-                                onMessagesChange(newList)
-                            }
+                        color = bubbleColor,
+                        shape = RoundedCornerShape(
+                            topStart = 20.dp, 
+                            topEnd = 20.dp, 
+                            bottomStart = if (msg.isUser) 20.dp else 4.dp, 
+                            bottomEnd = if (msg.isUser) 4.dp else 20.dp
+                        ),
+                        tonalElevation = 4.dp,
+                        shadowElevation = 2.dp,
+                        modifier = Modifier.widthIn(max = 300.dp).combinedClickable(
+                            onLongClick = { onMessagesChange(messages.filter { it != msg }) },
+                            onClick = {}
                         )
                     ) {
-                        Text(msg.text, modifier = Modifier.padding(14.dp), color = if (msg.isUser || msg.isError) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(msg.text, modifier = Modifier.padding(14.dp), color = textColor, fontSize = 16.sp, lineHeight = 22.sp)
                     }
                 }
             }
             if (isLoading) { item { Text("Jarvis analyse...", color = Color.Gray, modifier = Modifier.padding(16.dp)) } }
         }
-        Row(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(value = input, onValueChange = { input = it }, modifier = Modifier.weight(1f), placeholder = { Text("Message...") }, shape = RoundedCornerShape(24.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = {
-                if (input.isNotBlank()) {
-                    val userMsg = input
-                    val newMessages = messages + ChatMessage(userMsg, true)
-                    onMessagesChange(newMessages)
-                    input = ""
-                    isLoading = true
-                    coroutineScope.launch {
-                        try {
-                            val prefs = context.getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
-                            val token = prefs.getString("google_id_token", null)
-                            val response = JarvisApiClient.apiService.sendMessage(ChatRequest(userMsg, token))
-                            onMessagesChange(newMessages + ChatMessage(response.response ?: response.text ?: "Aucune réponse.", false))
-                        } catch (e: Exception) {
-                            val errorMsg = when(e) {
-                                is java.net.UnknownHostException -> "Serveur introuvable. Vérifie l'URL ou ta connexion."
-                                is java.net.SocketTimeoutException -> "Le serveur met trop de temps à répondre (Hugging Face dort ?)."
-                                is retrofit2.HttpException -> "Erreur serveur : ${e.code()} ${e.message()}"
-                                else -> "Erreur : ${e.localizedMessage ?: "Inconnue"}"
+        Row(modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(16.dp)
+            .navigationBarsPadding(), 
+            verticalAlignment = Alignment.CenterVertically) {
+            
+            OutlinedTextField(
+                value = input, 
+                onValueChange = { input = it }, 
+                modifier = Modifier.weight(1f), 
+                placeholder = { Text("Parler à Jarvis...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)) }, 
+                shape = RoundedCornerShape(28.dp),
+                colors = TextFieldDefaults.outlinedTextFieldColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                ),
+                maxLines = 4
+            )
+            
+            Spacer(modifier = Modifier.width(12.dp))
+            
+            Surface(
+                onClick = {
+                    if (input.isNotBlank() && !isLoading) {
+                        val userMsg = input
+                        val newMessages = messages + ChatMessage(userMsg, true)
+                        onMessagesChange(newMessages)
+                        input = ""
+                        isLoading = true
+                        coroutineScope.launch {
+                            try {
+                                val prefs = context.getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
+                                val token = prefs.getString("google_id_token", null)
+                                val name = googleAccount?.displayName ?: "Antoine"
+                                val response = JarvisApiClient.apiService.sendMessage(ChatRequest(userMsg, token, name))
+                                onMessagesChange(newMessages + ChatMessage(response.response ?: response.text ?: "Aucune réponse.", false))
+                            } catch (e: Exception) {
+                                val errorMsg = "Erreur de connexion au serveur."
+                                onMessagesChange(newMessages + ChatMessage(errorMsg, false, isError = true))
+                            } finally {
+                                isLoading = false
                             }
-                            onMessagesChange(newMessages + ChatMessage(errorMsg, false, true))
-                        } finally { isLoading = false }
+                        }
+                    }
+                },
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(52.dp),
+                enabled = input.isNotBlank() && !isLoading
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    if (isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.Black, strokeWidth = 2.dp)
+                    } else {
+                        Text("↑", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                     }
                 }
-            }, shape = RoundedCornerShape(24.dp)) { Text("➤") }
+            }
         }
     }
 }
