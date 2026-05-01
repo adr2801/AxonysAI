@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.work.*
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
@@ -148,10 +149,34 @@ class MainActivity : ComponentActivity() {
 
     private fun handleSignInResult(account: GoogleSignInAccount?) {
         if (account != null) {
-            val prefs = getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
-            prefs.edit().putString("google_id_token", account.idToken).apply()
-            android.widget.Toast.makeText(this, "Connecté : ${account.displayName}", android.widget.Toast.LENGTH_SHORT).show()
-            onAuthSuccess?.invoke(account.displayName ?: "")
+            // On récupère le VRAI Access Token OAuth2 en arrière-plan
+            val scope = "oauth2:https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/calendar"
+            
+            lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    // On invalide l'ancien token au cas où pour en avoir un tout neuf
+                    com.google.android.gms.auth.GoogleAuthUtil.invalidateToken(this@MainActivity, account.idToken)
+                    
+                    val token = com.google.android.gms.auth.GoogleAuthUtil.getToken(
+                        this@MainActivity, 
+                        account.account ?: com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(this@MainActivity)?.account!!, 
+                        scope
+                    )
+                    
+                    val prefs = getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
+                    prefs.edit().putString("google_id_token", token).apply()
+                    
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        android.widget.Toast.makeText(this@MainActivity, "Accès Workspace activé !", android.widget.Toast.LENGTH_SHORT).show()
+                        onAuthSuccess?.invoke(account.displayName ?: "")
+                    }
+                } catch (e: Exception) {
+                    Log.e("CortexAuth", "Erreur AccessToken: ${e.message}")
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        android.widget.Toast.makeText(this@MainActivity, "Erreur d'accès Workspace", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
         }
     }
 
