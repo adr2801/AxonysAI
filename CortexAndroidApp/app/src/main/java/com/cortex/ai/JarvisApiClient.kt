@@ -25,9 +25,16 @@ interface JarvisApiService {
 object JarvisApiClient {
     private const val BASE_URL = "https://addrr-cortex-ai.hf.space/"
 
+    private val okHttpClient = okhttp3.OkHttpClient.Builder()
+        .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+
     val apiService: JarvisApiService by lazy {
         Retrofit.Builder()
             .baseUrl(BASE_URL)
+            .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(JarvisApiService::class.java)
