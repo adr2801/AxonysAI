@@ -17,6 +17,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -286,7 +287,7 @@ fun PrioritizerScreen(iaPrioriseur: MlpPrioriseur, tasks: List<TaskItem>, onTask
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun JarvisScreen(messages: List<ChatMessage>, onMessagesChange: (List<ChatMessage>) -> Unit) {
     var input by remember { mutableStateOf("") }
@@ -303,7 +304,21 @@ fun JarvisScreen(messages: List<ChatMessage>, onMessagesChange: (List<ChatMessag
                 val align = if (msg.isUser) Alignment.CenterEnd else Alignment.CenterStart
                 val bubbleColor = if (msg.isError) Color(0xFFD32F2F) else if (msg.isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
                 Box(contentAlignment = align, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                    Surface(shape = RoundedCornerShape(16.dp), color = bubbleColor, modifier = Modifier.fillMaxWidth(0.85f)) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp), 
+                        color = bubbleColor, 
+                        modifier = Modifier
+                            .fillMaxWidth(0.85f)
+                            .combinedClickable(
+                                onClick = { /* Ne rien faire sur un clic simple */ },
+                                onLongClick = { 
+                                    // Supprimer ce message précis
+                                    val newList = messages.toMutableList()
+                                    newList.removeAt(messages.indexOf(msg))
+                                    onMessagesChange(newList)
+                                }
+                            )
+                    ) {
                         Text(msg.text, modifier = Modifier.padding(14.dp), color = if (msg.isUser || msg.isError) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
