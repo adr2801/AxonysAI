@@ -155,7 +155,7 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 try {
                     // On invalide l'ancien token au cas où pour en avoir un tout neuf
-                    com.google.android.gms.auth.GoogleAuthUtil.invalidateToken(this@MainActivity, account.idToken)
+                    account.idToken?.let { com.google.android.gms.auth.GoogleAuthUtil.invalidateToken(this@MainActivity, it) }
                     
                     val token = com.google.android.gms.auth.GoogleAuthUtil.getToken(
                         this@MainActivity, 
