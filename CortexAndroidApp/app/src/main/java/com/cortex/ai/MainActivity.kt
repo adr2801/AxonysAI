@@ -228,8 +228,13 @@ class MainActivity : ComponentActivity() {
                 GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                         .requestEmail()
                         .requestProfile()
-                        .requestScopes(Scope("https://www.googleapis.com/auth/gmail.modify"))
-                        .requestScopes(Scope("https://www.googleapis.com/auth/calendar"))
+                        .requestScopes(
+                                Scope("https://www.googleapis.com/auth/gmail.readonly"),
+                                Scope("https://www.googleapis.com/auth/calendar.readonly"),
+                                Scope("https://www.googleapis.com/auth/gmail.modify"),
+                                Scope("https://www.googleapis.com/auth/documents"),
+                                Scope("https://www.googleapis.com/auth/drive.file")
+                        )
                         .requestIdToken(
                                 "449010615326-bn7o6ek8jau2kphiaof04nptkbvntokl.apps.googleusercontent.com"
                         )
@@ -321,7 +326,7 @@ class MainActivity : ComponentActivity() {
             withContext(Dispatchers.IO) {
                 try {
                     val scope =
-                            "oauth2:https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.modify"
+                            "oauth2:https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file"
                     // Clear current token to force refresh if needed
                     val prefs = getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
                     val currentToken = prefs.getString("google_id_token", null)
@@ -566,7 +571,7 @@ fun JarvisScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Column(modifier = Modifier.fillMaxSize()) {
         Box(
                 modifier =
                         Modifier.fillMaxWidth()
