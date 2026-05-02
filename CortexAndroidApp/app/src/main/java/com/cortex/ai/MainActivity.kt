@@ -27,7 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -412,7 +412,7 @@ fun MainScreen(
                     NavigationBarItem(
                             selected = selectedTab == 1,
                             onClick = { selectedTab = 1 },
-                            icon = { Icon(Icons.Default.Chat, contentDescription = null) },
+                            icon = { Icon(Icons.Default.Email, contentDescription = null) },
                             label = { Text("Jarvis", fontWeight = FontWeight.Medium) }
                     )
                     NavigationBarItem(
