@@ -1,6 +1,9 @@
 package com.cortex.ai
 
 import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -68,7 +71,9 @@ data class TaskItem(val name: String, val score: Double)
 class MainActivity : ComponentActivity() {
 
     private val requestPermissionLauncher =
-            registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> }
+            registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+                if (!isGranted) Log.w("CortexAuth", "Permission notification refusée")
+            }
 
     private val googleSignInLauncher =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -89,8 +94,21 @@ class MainActivity : ComponentActivity() {
 
     private var onAuthSuccess: ((String) -> Unit)? = null
 
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent) 
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Demande de permission notification pour Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        
         val iaPrioriseur = MlpPrioriseur()
 
         val prefs = getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
@@ -132,6 +150,15 @@ class MainActivity : ComponentActivity() {
             var chatMessages by remember { mutableStateOf(initialMessages) }
             var prioritizedTasks by remember { mutableStateOf(initialTasks) }
             var googleAccount by remember { mutableStateOf(lastAccount) }
+            var activeNotification by remember {
+                mutableStateOf(
+                    intent.getStringExtra("notif_title")?.let { title ->
+                        intent.getStringExtra("notif_message")?.let { message ->
+                            JarvisNotification(title, message, "")
+                        }
+                    }
+                )
+            }
 
             // Rafraîchissement automatique au démarrage
             LaunchedEffect(googleAccount) {
@@ -372,7 +399,30 @@ fun MainScreen(
 ) {
     var selectedTab by remember { mutableStateOf(0) }
     var updateUrl by remember { mutableStateOf<String?>(null) }
+    var activeNotification by remember { mutableStateOf<JarvisNotification?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    // Polling pour les notifications proactives
+    LaunchedEffect(googleAccount) {
+        if (googleAccount != null) {
+            while (true) {
+                try {
+                    val response = JarvisApiClient.apiService.getNotifications()
+                    if (response.notifications.isNotEmpty()) {
+                        response.notifications.forEach { notif ->
+                            showNativeNotification(context, notif.title, notif.message)
+                            // On pourrait aussi les afficher dans la liste de chat si besoin
+                        }
+                        // Une fois reçues, on demande au serveur de les effacer
+                        JarvisApiClient.apiService.clearNotifications()
+                    }
+                } catch (e: Exception) {
+                    Log.e("CortexNotif", "Erreur polling: ${e.message}")
+                }
+                kotlinx.coroutines.delay(30000) // Toutes les 30 secondes
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         try {
@@ -460,8 +510,102 @@ fun MainScreen(
                             )
                 }
             }
+
+            // Écran de détail de notification (Overlay)
+            activeNotification?.let { notif ->
+                NotificationDetailScreen(
+                    notification = notif,
+                    onDismiss = { activeNotification = null }
+                )
+            }
         }
     }
+}
+
+@Composable
+fun NotificationDetailScreen(
+    notification: JarvisNotification,
+    onDismiss: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.9f))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.85f)
+                .padding(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(24.dp),
+            tonalElevation = 8.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "🤖 Jarvis vous informe",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    notification.title,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    notification.message,
+                    fontSize = 16.sp,
+                    lineHeight = 24.sp,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(32.dp))
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Compris, merci Jarvis")
+                }
+            }
+        }
+    }
+}
+
+private fun showNativeNotification(context: Context, title: String, message: String) {
+    val channelId = "jarvis_alerts"
+    val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        val channel = NotificationChannel(channelId, "Alertes Jarvis", NotificationManager.IMPORTANCE_HIGH)
+        notificationManager.createNotificationChannel(channel)
+    }
+
+    val intent = Intent(context, MainActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        putExtra("notif_title", title)
+        putExtra("notif_message", message)
+    }
+
+    val pendingIntent = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+    val builder = androidx.core.app.NotificationCompat.Builder(context, channelId)
+        .setSmallIcon(android.R.drawable.ic_dialog_info)
+        .setContentTitle(title)
+        .setContentText(message)
+        .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(message))
+        .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+        .setContentIntent(pendingIntent)
+        .setAutoCancel(true)
+
+    notificationManager.notify(System.currentTimeMillis().toInt(), builder.build())
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
