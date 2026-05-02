@@ -55,6 +55,9 @@ import com.google.android.gms.common.api.Scope
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.util.concurrent.TimeUnit
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import android.location.Location
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -71,11 +74,29 @@ data class ChatMessage(val text: String, val isUser: Boolean, val isError: Boole
 data class TaskItem(val name: String, val score: Double)
 
 class MainActivity : ComponentActivity() {
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private var currentLatitude: Double? = null
+    private var currentLongitude: Double? = null
 
     private val requestPermissionLauncher =
             registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-                if (!isGranted) Log.w("CortexAuth", "Permission notification refusée")
+                if (isGranted) {
+                    requestLocation()
+                } else {
+                    Log.w("CortexAuth", "Permission refusée")
+                }
             }
+
+    private fun requestLocation() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
+                currentLatitude = location?.latitude
+                currentLongitude = location?.longitude
+            }
+        } else {
+            requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+    }
 
     private val googleSignInLauncher =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -104,6 +125,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        requestLocation()
+
         // Demande de permission notification pour Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -497,7 +521,7 @@ fun MainScreen(
             Crossfade(targetState = selectedTab, animationSpec = tween(400)) { tab ->
                 when (tab) {
                     0 -> PrioritizerScreen(iaPrioriseur, prioritizedTasks, onTasksChange)
-                    1 -> JarvisScreen(chatMessages, googleAccount, onMessagesChange, onRefreshToken)
+                    1 -> JarvisScreen(chatMessages, googleAccount, currentLatitude, currentLongitude, onMessagesChange, onRefreshToken)
                     2 ->
                             SettingsScreen(
                                     themeMode,
@@ -701,6 +725,8 @@ fun PrioritizerScreen(
 fun JarvisScreen(
         messages: List<ChatMessage>,
         googleAccount: GoogleSignInAccount?,
+        lat: Double?,
+        lng: Double?,
         onMessagesChange: (List<ChatMessage>) -> Unit,
         onRefreshToken: suspend () -> String?
 ) {
@@ -846,7 +872,7 @@ fun JarvisScreen(
                                     val name = googleAccount?.displayName ?: "Antoine"
                                     val response =
                                             JarvisApiClient.apiService.sendMessage(
-                                                    ChatRequest(userMsg, token, name)
+                                                    ChatRequest(userMsg, token, name, lat, lng)
                                             )
                                     onMessagesChange(
                                             newMessages +

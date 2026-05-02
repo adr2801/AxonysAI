@@ -7,7 +7,13 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 
 // Modèles de données
-data class ChatRequest(val prompt: String, val google_token: String? = null, val user_name: String? = "Antoine")
+data class ChatRequest(
+    val prompt: String, 
+    val google_token: String? = null, 
+    val user_name: String? = "Antoine",
+    val lat: Double? = null,
+    val lng: Double? = null
+)
 data class ChatResponse(val response: String?, val text: String?)
 data class GithubRelease(val tag_name: String, val html_url: String)
 data class JarvisNotification(val title: String, val message: String, val timestamp: String)
