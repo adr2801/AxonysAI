@@ -58,9 +58,6 @@ import com.google.android.gms.common.api.Scope
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.util.concurrent.TimeUnit
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationServices
-import android.location.Location
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
