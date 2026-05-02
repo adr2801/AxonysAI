@@ -12,9 +12,12 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
+import android.location.Location
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -75,8 +78,7 @@ data class TaskItem(val name: String, val score: Double)
 
 class MainActivity : ComponentActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
-    private var currentLatitude: Double? = null
-    private var currentLongitude: Double? = null
+    private var updateLocation: ((Double, Double) -> Unit)? = null
 
     private val requestPermissionLauncher =
             registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
@@ -90,8 +92,9 @@ class MainActivity : ComponentActivity() {
     private fun requestLocation() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
-                currentLatitude = location?.latitude
-                currentLongitude = location?.longitude
+                location?.let {
+                    updateLocation?.invoke(it.latitude, it.longitude)
+                }
             }
         } else {
             requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -185,6 +188,14 @@ class MainActivity : ComponentActivity() {
                     }
                 )
             }
+            
+            var currentLatitude by remember { mutableStateOf<Double?>(null) }
+            var currentLongitude by remember { mutableStateOf<Double?>(null) }
+            
+            updateLocation = { lat, lng ->
+                currentLatitude = lat
+                currentLongitude = lng
+            }
 
             // Rafraîchissement automatique au démarrage
             LaunchedEffect(googleAccount) {
@@ -246,6 +257,8 @@ class MainActivity : ComponentActivity() {
                             chatMessages = chatMessages,
                             prioritizedTasks = prioritizedTasks,
                             googleAccount = googleAccount,
+                            lat = currentLatitude,
+                            lng = currentLongitude,
                             onThemeChange = {
                                 themeMode = it
                                 prefs.edit().putString("theme_mode", it.name).apply()
@@ -413,6 +426,8 @@ fun MainScreen(
         chatMessages: List<ChatMessage>,
         prioritizedTasks: List<TaskItem>,
         googleAccount: GoogleSignInAccount?,
+        lat: Double?,
+        lng: Double?,
         onThemeChange: (ThemeMode) -> Unit,
         onBriefingToggle: (Boolean) -> Unit,
         onMessagesChange: (List<ChatMessage>) -> Unit,
@@ -521,7 +536,7 @@ fun MainScreen(
             Crossfade(targetState = selectedTab, animationSpec = tween(400)) { tab ->
                 when (tab) {
                     0 -> PrioritizerScreen(iaPrioriseur, prioritizedTasks, onTasksChange)
-                    1 -> JarvisScreen(chatMessages, googleAccount, currentLatitude, currentLongitude, onMessagesChange, onRefreshToken)
+                    1 -> JarvisScreen(chatMessages, googleAccount, lat, lng, onMessagesChange, onRefreshToken)
                     2 ->
                             SettingsScreen(
                                     themeMode,
