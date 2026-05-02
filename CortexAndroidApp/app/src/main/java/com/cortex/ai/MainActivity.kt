@@ -226,6 +226,24 @@ class MainActivity : ComponentActivity() {
             workManager.enqueueUniquePeriodicWork("morning_briefing", ExistingPeriodicWorkPolicy.UPDATE, briefingRequest)
         } else { workManager.cancelUniqueWork("morning_briefing") }
     }
+
+    private suspend fun getFreshAccessToken(account: GoogleSignInAccount): String? = withContext(Dispatchers.IO) {
+        try {
+            val scope = "oauth2:https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.modify"
+            // Clear current token to force refresh if needed
+            val prefs = getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
+            val currentToken = prefs.getString("google_id_token", null)
+            if (currentToken != null) {
+                com.google.android.gms.auth.GoogleAuthUtil.clearToken(this@MainActivity, currentToken)
+            }
+            val newToken = com.google.android.gms.auth.GoogleAuthUtil.getToken(this@MainActivity, account.account!!, scope)
+            prefs.edit().putString("google_id_token", newToken).apply()
+            newToken
+        } catch (e: Exception) {
+            Log.e("CortexAuth", "Erreur refresh token: ${e.message}")
+            null
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -286,7 +304,7 @@ fun MainScreen(
             Crossfade(targetState = selectedTab, animationSpec = tween(400)) { tab ->
                 when (tab) {
                     0 -> PrioritizerScreen(iaPrioriseur, prioritizedTasks, onTasksChange)
-                    1 -> JarvisScreen(chatMessages, googleAccount, onMessagesChange)
+                    1 -> JarvisScreen(chatMessages, googleAccount, onMessagesChange, onRefreshToken)
                     2 -> SettingsScreen(themeMode, isBriefingEnabled, googleAccount, onThemeChange, onBriefingToggle, onGoogleSignIn, onGoogleSignOut, onRequestNotifPermission, onRequestNotifAccess)
                 }
             }
@@ -338,7 +356,12 @@ fun PrioritizerScreen(iaPrioriseur: MlpPrioriseur, tasks: List<TaskItem>, onTask
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun JarvisScreen(messages: List<ChatMessage>, googleAccount: GoogleSignInAccount?, onMessagesChange: (List<ChatMessage>) -> Unit) {
+fun JarvisScreen(
+    messages: List<ChatMessage>, 
+    googleAccount: GoogleSignInAccount?, 
+    onMessagesChange: (List<ChatMessage>) -> Unit,
+    onRefreshToken: suspend () -> String?
+) {
     var input by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
@@ -423,7 +446,12 @@ fun JarvisScreen(messages: List<ChatMessage>, googleAccount: GoogleSignInAccount
                         coroutineScope.launch {
                             try {
                                 val prefs = context.getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
-                                val token = prefs.getString("google_id_token", null)
+                                var token = prefs.getString("google_id_token", null)
+                                
+                                // Rafraîchissement automatique du token
+                                val freshToken = onRefreshToken()
+                                if (freshToken != null) token = freshToken
+
                                 val name = googleAccount?.displayName ?: "Antoine"
                                 val response = JarvisApiClient.apiService.sendMessage(ChatRequest(userMsg, token, name))
                                 onMessagesChange(newMessages + ChatMessage(response.response ?: response.text ?: "Aucune réponse.", false))
