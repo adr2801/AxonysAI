@@ -27,8 +27,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChatBubbleOutline
-import androidx.compose.material.icons.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -406,13 +406,13 @@ fun MainScreen(
                     NavigationBarItem(
                             selected = selectedTab == 0,
                             onClick = { selectedTab = 0 },
-                            icon = { Icon(Icons.Default.FormatListBulleted, contentDescription = null) },
+                            icon = { Icon(Icons.Default.List, contentDescription = null) },
                             label = { Text("Focus", fontWeight = FontWeight.Medium) }
                     )
                     NavigationBarItem(
                             selected = selectedTab == 1,
                             onClick = { selectedTab = 1 },
-                            icon = { Icon(Icons.Default.ChatBubbleOutline, contentDescription = null) },
+                            icon = { Icon(Icons.Default.Chat, contentDescription = null) },
                             label = { Text("Jarvis", fontWeight = FontWeight.Medium) }
                     )
                     NavigationBarItem(
