@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cortex IA — Votre Assistant Intelligent</title>
+    <meta name="description" content="Cortex IA est un assistant personnel alimenté par l'intelligence artificielle qui gère vos emails, votre calendrier et vos documents Google Docs.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0F111A;
+            color: #E2E8F0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 2rem;
+            background: radial-gradient(ellipse at 50% 0%, rgba(79, 70, 229, 0.15) 0%, transparent 60%),
+                        linear-gradient(180deg, #0F111A 0%, #1A1D2E 100%);
+        }
+        .logo {
+            font-size: 4rem;
+            font-weight: 900;
+            letter-spacing: 0.3em;
+            background: linear-gradient(135deg, #64B5F6, #9575CD);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 1rem;
+        }
+        .tagline {
+            font-size: 1.4rem;
+            font-weight: 300;
+            color: #94A3B8;
+            max-width: 600px;
+            line-height: 1.8;
+            margin-bottom: 3rem;
+        }
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            max-width: 900px;
+            width: 100%;
+            margin-bottom: 3rem;
+        }
+        .feature-card {
+            background: rgba(26, 29, 46, 0.8);
+            border: 1px solid rgba(100, 181, 246, 0.1);
+            border-radius: 16px;
+            padding: 2rem;
+            text-align: left;
+            transition: transform 0.3s, border-color 0.3s;
+        }
+        .feature-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(100, 181, 246, 0.3);
+        }
+        .feature-icon { font-size: 2rem; margin-bottom: 1rem; }
+        .feature-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; color: #F1F5F9; }
+        .feature-desc { font-size: 0.9rem; color: #94A3B8; line-height: 1.6; }
+        .cta {
+            display: inline-block;
+            padding: 1rem 2.5rem;
+            background: linear-gradient(135deg, #4F46E5, #7C3AED);
+            color: white;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-bottom: 2rem;
+        }
+        .cta:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 40px rgba(79, 70, 229, 0.3);
+        }
+        .footer {
+            text-align: center;
+            padding: 2rem;
+            color: #475569;
+            font-size: 0.85rem;
+        }
+        .footer a { color: #64B5F6; text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <div class="logo">CORTEX IA</div>
+        <p class="tagline">
+            Votre majordome numérique personnel. Jarvis gère vos emails, votre calendrier 
+            et vos documents avec l'élégance d'un assistant britannique.
+        </p>
+        <div class="features">
+            <div class="feature-card">
+                <div class="feature-icon">📧</div>
+                <div class="feature-title">Gestion des Emails</div>
+                <div class="feature-desc">Lisez, envoyez et organisez vos emails Gmail par simple commande vocale ou textuelle.</div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📅</div>
+                <div class="feature-title">Calendrier Intelligent</div>
+                <div class="feature-desc">Créez des événements, consultez votre planning et ne manquez plus jamais un rendez-vous.</div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📝</div>
+                <div class="feature-title">Google Docs</div>
+                <div class="feature-desc">Créez et éditez vos documents directement depuis une conversation avec Jarvis.</div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🧠</div>
+                <div class="feature-title">Priorisation IA</div>
+                <div class="feature-desc">Un réseau de neurones analyse vos tâches et les classe par ordre de priorité intelligemment.</div>
+            </div>
+        </div>
+        <a href="https://github.com/antmusic/CortexAI/releases" class="cta">Télécharger l'APK</a>
+    </div>
+    <div class="footer">
+        <p>© 2024 Cortex IA — Développé par Antoine Drai</p>
+        <p><a href="privacy.html">Politique de Confidentialité</a></p>
+    </div>
+</body>
+</html>
