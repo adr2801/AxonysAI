@@ -26,6 +26,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -129,6 +133,17 @@ class MainActivity : ComponentActivity() {
             var prioritizedTasks by remember { mutableStateOf(initialTasks) }
             var googleAccount by remember { mutableStateOf(lastAccount) }
 
+            // Rafraîchissement automatique au démarrage
+            LaunchedEffect(googleAccount) {
+                googleAccount?.let { account ->
+                    val token = getFreshAccessToken(account)
+                    if (token != null) {
+                        prefs.edit().putString("google_id_token", token).apply()
+                        Log.d("CortexAuth", "Token rafraîchi automatiquement au démarrage")
+                    }
+                }
+            }
+
             onAuthSuccess = { googleAccount = GoogleSignIn.getLastSignedInAccount(this) }
 
             val isDark =
@@ -153,13 +168,15 @@ class MainActivity : ComponentActivity() {
 
             val lightColors =
                     lightColorScheme(
-                            primary = Color(0xFF1976D2),
-                            secondary = Color(0xFF673AB7),
-                            background = Color(0xFFF5F7FA),
+                            primary = Color(0xFF4F46E5), // Indigo Moderne
+                            secondary = Color(0xFF7C3AED), // Violet
+                            background = Color(0xFFF9FAFB), // Blanc cassé
                             surface = Color.White,
                             onPrimary = Color.White,
-                            onBackground = Color(0xFF1A1C1E),
-                            onSurface = Color(0xFF1A1C1E)
+                            onBackground = Color(0xFF111827),
+                            onSurface = Color(0xFF1F2937),
+                            primaryContainer = Color(0xFFEEF2FF), // Fond bulle utilisateur
+                            surfaceVariant = Color(0xFFF3F4F6) // Fond bulle Jarvis
                     )
 
             val colorScheme = if (isDark) darkColors else lightColors
@@ -389,20 +406,20 @@ fun MainScreen(
                     NavigationBarItem(
                             selected = selectedTab == 0,
                             onClick = { selectedTab = 0 },
-                            icon = { Text("📋") },
-                            label = { Text("Focus") }
+                            icon = { Icon(Icons.Default.FormatListBulleted, contentDescription = null) },
+                            label = { Text("Focus", fontWeight = FontWeight.Medium) }
                     )
                     NavigationBarItem(
                             selected = selectedTab == 1,
                             onClick = { selectedTab = 1 },
-                            icon = { Text("🤖") },
-                            label = { Text("Jarvis") }
+                            icon = { Icon(Icons.Default.ChatBubbleOutline, contentDescription = null) },
+                            label = { Text("Jarvis", fontWeight = FontWeight.Medium) }
                     )
                     NavigationBarItem(
                             selected = selectedTab == 2,
                             onClick = { selectedTab = 2 },
-                            icon = { Text("⚙️") },
-                            label = { Text("Paramètres") }
+                            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                            label = { Text("Paramètres", fontWeight = FontWeight.Medium) }
                     )
                 }
             }
@@ -413,8 +430,10 @@ fun MainScreen(
                                 .padding(padding)
                                 .background(
                                         Brush.verticalGradient(
-                                                colors =
-                                                        listOf(Color(0xFF0F111A), Color(0xFF1A1D2E))
+                                                colors = if (isSystemInDarkTheme())
+                                                    listOf(Color(0xFF0F111A), Color(0xFF1A1D2E))
+                                                else
+                                                    listOf(Color(0xFFF9FAFB), Color(0xFFF3F4F6))
                                         )
                                 )
         ) {
