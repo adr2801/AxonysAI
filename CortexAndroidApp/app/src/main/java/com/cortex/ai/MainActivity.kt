@@ -214,7 +214,8 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(googleAccount) {
                 while (true) {
                     try {
-                        val notifs = JarvisApiClient.apiService.getNotifications()
+                        val notifResponse = JarvisApiClient.apiService.getNotifications()
+                        val notifs = notifResponse.notifications
                         if (notifs.isNotEmpty()) {
                             notifs.forEach { notif ->
                                 showNativeNotification(this@MainActivity, notif.title, notif.message)
