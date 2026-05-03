@@ -23,7 +23,8 @@ data class GithubRelease(val tag_name: String, val html_url: String)
 data class JarvisNotification(val title: String, val message: String, val timestamp: String)
 data class NotificationResponse(val notifications: List<JarvisNotification>)
 
-data class HistoryResponse(val history: List<ChatMessage>)
+data class ApiMessage(val role: String, val content: String)
+data class HistoryResponse(val history: List<ApiMessage>)
 
 // Interfaces Retrofit
 interface GithubApiService {
