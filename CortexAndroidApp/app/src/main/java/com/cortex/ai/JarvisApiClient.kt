@@ -12,9 +12,11 @@ data class ChatRequest(
     val google_token: String? = null, 
     val user_name: String? = "Antoine",
     val lat: Double? = null,
-    val lng: Double? = null
+    val lng: Double? = null,
+    val thread_id: String? = "main"
 )
 data class ChatResponse(val response: String?, val text: String?)
+data class ThreadResponse(val threads: List<String>)
 data class GithubRelease(val tag_name: String, val html_url: String)
 data class JarvisNotification(val title: String, val message: String, val timestamp: String)
 data class NotificationResponse(val notifications: List<JarvisNotification>)
@@ -26,10 +28,16 @@ interface GithubApiService {
 }
 
 interface JarvisApiService {
-    @POST("chat")
+    @POST("/chat")
     suspend fun sendMessage(@Body request: ChatRequest): ChatResponse
 
-    @GET("notifications")
+    @POST("/anticipate")
+    suspend fun anticipate(@Body request: ChatRequest): ChatResponse
+
+    @GET("/threads")
+    suspend fun getThreads(): ThreadResponse
+
+    @GET("/notifications")
     suspend fun getNotifications(): NotificationResponse
 
     @POST("notifications/clear")

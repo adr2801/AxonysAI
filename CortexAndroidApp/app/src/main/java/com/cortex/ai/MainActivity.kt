@@ -120,6 +120,13 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent) 
+        // Si l'intent contient une notification, on peut déclencher un rafraîchissement
+        intent?.getStringExtra("notif_title")?.let { title ->
+            intent.getStringExtra("notif_message")?.let { message ->
+                // On pourra passer ça à l'état Compose via une callback ou un LiveData si besoin
+                Log.d("CortexNotif", "Nouvelle notification reçue via Intent: $title")
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -127,6 +134,9 @@ class MainActivity : ComponentActivity() {
         
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         requestLocation()
+        
+        // Activation de l'anticipation proactive
+        toggleAnticipationWorker(true)
 
         // Demande de permission notification pour Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -177,13 +187,19 @@ class MainActivity : ComponentActivity() {
             var prioritizedTasks by remember { mutableStateOf(initialTasks) }
             var googleAccount by remember { mutableStateOf(lastAccount) }
             var activeNotification by remember {
-                mutableStateOf(
-                    intent.getStringExtra("notif_title")?.let { title ->
-                        intent.getStringExtra("notif_message")?.let { message ->
-                            JarvisNotification(title, message, "")
-                        }
+                mutableStateOf<JarvisNotification?>(null)
+            }
+
+            // Surveillance des changements d'Intent pour afficher les notifications cliquées
+            LaunchedEffect(intent) {
+                intent?.getStringExtra("notif_title")?.let { title ->
+                    intent?.getStringExtra("notif_message")?.let { message ->
+                        activeNotification = JarvisNotification(title, message, "")
+                        // Nettoyage de l'intent pour éviter de réafficher la notif au pivotement
+                        intent.removeExtra("notif_title")
+                        intent.removeExtra("notif_message")
                     }
-                )
+                }
             }
             
             var currentLatitude by remember { mutableStateOf<Double?>(null) }
@@ -192,6 +208,27 @@ class MainActivity : ComponentActivity() {
             updateLocation = { lat, lng ->
                 currentLatitude = lat
                 currentLongitude = lng
+            }
+
+            // Polling des notifications proactives
+            LaunchedEffect(googleAccount) {
+                while (true) {
+                    try {
+                        val notifs = JarvisApiClient.apiService.getNotifications()
+                        if (notifs.isNotEmpty()) {
+                            notifs.forEach { notif ->
+                                showNativeNotification(this@MainActivity, notif.title, notif.message)
+                                // Ajout automatique à la discussion
+                                val chatNotif = ChatMessage("🔔 **${notif.title}**\n${notif.message}", false)
+                                chatMessages = chatMessages + chatNotif
+                            }
+                            JarvisApiClient.apiService.clearNotifications()
+                        }
+                    } catch (e: Exception) {
+                        Log.e("JarvisPolling", "Erreur polling: ${e.message}")
+                    }
+                    kotlinx.coroutines.delay(30000) // 30 secondes
+                }
             }
 
             // Rafraîchissement automatique au démarrage
@@ -382,6 +419,25 @@ class MainActivity : ComponentActivity() {
             )
         } else {
             workManager.cancelUniqueWork("morning_briefing")
+        }
+    }
+
+    private fun toggleAnticipationWorker(enabled: Boolean) {
+        val workManager = WorkManager.getInstance(this)
+        if (enabled) {
+            val anticipateRequest =
+                    PeriodicWorkRequestBuilder<AnticipationWorker>(1, TimeUnit.HOURS)
+                            .setInitialDelay(5, TimeUnit.MINUTES)
+                            .addTag("jarvis_anticipation")
+                            .build()
+            workManager.enqueueUniquePeriodicWork(
+                    "jarvis_anticipation",
+                    ExistingPeriodicWorkPolicy.KEEP, // Garder si déjà existant
+                    anticipateRequest
+            )
+            Log.d("JarvisAnticipate", "Moteur d'anticipation programmé (1h)")
+        } else {
+            workManager.cancelUniqueWork("jarvis_anticipation")
         }
     }
 
@@ -618,32 +674,36 @@ fun NotificationDetailScreen(
 }
 
 private fun showNativeNotification(context: Context, title: String, message: String) {
-    val channelId = "jarvis_alerts"
-    val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-        val channel = NotificationChannel(channelId, "Alertes Jarvis", NotificationManager.IMPORTANCE_HIGH)
-        notificationManager.createNotificationChannel(channel)
-    }
-
+    val channelId = "jarvis_notifications"
     val intent = Intent(context, MainActivity::class.java).apply {
-        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         putExtra("notif_title", title)
         putExtra("notif_message", message)
     }
 
-    val pendingIntent = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    val pendingIntent = PendingIntent.getActivity(
+        context, 0, intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
-    val builder = androidx.core.app.NotificationCompat.Builder(context, channelId)
-        .setSmallIcon(android.R.drawable.ic_dialog_info)
+    val notification = androidx.core.app.NotificationCompat.Builder(context, channelId)
+        .setSmallIcon(R.mipmap.ic_launcher)
         .setContentTitle(title)
         .setContentText(message)
         .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(message))
         .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
         .setContentIntent(pendingIntent)
         .setAutoCancel(true)
+        .build()
 
-    notificationManager.notify(System.currentTimeMillis().toInt(), builder.build())
+    val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        val channel = NotificationChannel(channelId, "Alertes Jarvis", NotificationManager.IMPORTANCE_HIGH)
+        notificationManager.createNotificationChannel(channel)
+    }
+    
+    notificationManager.notify(System.currentTimeMillis().toInt(), notification)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -746,161 +806,303 @@ fun JarvisScreen(
     var isLoading by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
-
     val listState = rememberLazyListState()
 
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
+    // --- Gestion des Threads ---
+    var currentThreadId by remember { mutableStateOf("main") }
+    var threads by remember { mutableStateOf(listOf("main")) }
+    var showSidebar by remember { mutableStateOf(false) }
+    var showNewThreadDialog by remember { mutableStateOf(false) }
+    var newThreadName by remember { mutableStateOf("") }
+    // Messages par thread (stockés localement pour éviter de tout recharger)
+    var threadMessages by remember { mutableStateOf(mapOf("main" to messages)) }
+    val currentMessages = threadMessages[currentThreadId] ?: emptyList()
+
+    // Synchronisation du thread "main" avec les messages partagés
+    LaunchedEffect(messages) {
+        threadMessages = threadMessages.toMutableMap().also { it["main"] = messages }
+    }
+
+    // Chargement des threads disponibles depuis l'API
+    LaunchedEffect(Unit) {
+        try {
+            val response = JarvisApiClient.apiService.getThreads()
+            threads = response.threads
+        } catch (e: Exception) {
+            Log.e("JarvisThreads", "Erreur chargement threads: ${e.message}")
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Box(
-                modifier =
-                        Modifier.fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surface)
-                                .padding(24.dp)
+    // Auto-scroll au dernier message
+    LaunchedEffect(currentMessages.size) {
+        if (currentMessages.isNotEmpty()) listState.animateScrollToItem(currentMessages.size - 1)
+    }
+
+    // Couleur d'accent selon le thread (main = bleu primaire, autres = violet/orange)
+    val threadColor = if (currentThreadId == "main")
+        MaterialTheme.colorScheme.primary
+    else Color(0xFF9575CD)
+
+    // Dialogue de création de nouveau thread
+    if (showNewThreadDialog) {
+        AlertDialog(
+            onDismissRequest = { showNewThreadDialog = false },
+            title = { Text("Nouvelle Discussion", fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = newThreadName,
+                    onValueChange = { newThreadName = it },
+                    label = { Text("Nom du canal (ex: 📚 NSI, 🚀 Projet...)") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    if (newThreadName.isNotBlank()) {
+                        val threadId = newThreadName.lowercase().replace(" ", "_")
+                        threads = threads + threadId
+                        threadMessages = threadMessages.toMutableMap().also {
+                            it[threadId] = emptyList()
+                        }
+                        currentThreadId = threadId
+                        newThreadName = ""
+                        showNewThreadDialog = false
+                        showSidebar = false
+                    }
+                }) { Text("Créer") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewThreadDialog = false }) { Text("Annuler") }
+            }
+        )
+    }
+
+    Row(modifier = Modifier.fillMaxSize()) {
+        // --- SIDEBAR ---
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showSidebar,
+            enter = androidx.compose.animation.slideInHorizontally() + androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.slideOutHorizontally() + androidx.compose.animation.fadeOut()
         ) {
-            Text(
-                    "JARVIS",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 4.sp,
-                    color = MaterialTheme.colorScheme.primary
-            )
+            Surface(
+                modifier = Modifier.width(220.dp).fillMaxHeight(),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 8.dp
+            ) {
+                Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                    Text(
+                        "🤖 Discussions",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    threads.forEach { threadId ->
+                        val isSelected = threadId == currentThreadId
+                        val displayName = if (threadId == "main") "🏠 Général" else "📌 ${threadId.replace("_", " ")}"
+                        Surface(
+                            onClick = {
+                                currentThreadId = threadId
+                                showSidebar = false
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) threadColor.copy(alpha = 0.2f)
+                                    else Color.Transparent,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                        ) {
+                            Text(
+                                displayName,
+                                modifier = Modifier.padding(12.dp),
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) threadColor else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // Bouton "+" Créer un canal
+                    Button(
+                        onClick = { showNewThreadDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = threadColor)
+                    ) {
+                        Text("+ Nouveau canal")
+                    }
+                }
+            }
         }
-        LazyColumn(
+
+        // --- CHAT PRINCIPAL ---
+        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+
+            // En-tête avec le nom du thread actif
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            listOf(
+                                threadColor.copy(alpha = 0.15f),
+                                MaterialTheme.colorScheme.surface
+                            )
+                        )
+                    )
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Bouton sidebar
+                    Surface(
+                        onClick = { showSidebar = !showSidebar },
+                        shape = RoundedCornerShape(10.dp),
+                        color = threadColor.copy(alpha = 0.15f),
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(if (showSidebar) "✕" else "☰", fontSize = 18.sp, color = threadColor)
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            if (currentThreadId == "main") "JARVIS" else currentThreadId.replace("_", " ").uppercase(),
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 3.sp,
+                            color = threadColor
+                        )
+                        if (currentThreadId != "main") {
+                            Text("Sous-discussion spécialisée", fontSize = 11.sp, color = Color.Gray)
+                        }
+                    }
+                }
+            }
+
+            // Messages du thread actif
+            LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(messages) { msg ->
-                val align = if (msg.isUser) Alignment.CenterEnd else Alignment.CenterStart
-                val bubbleColor =
+            ) {
+                item { Spacer(modifier = Modifier.height(8.dp)) }
+                items(currentMessages) { msg ->
+                    val align = if (msg.isUser) Alignment.CenterEnd else Alignment.CenterStart
+                    val bubbleColor =
                         if (msg.isError) Color(0xFFD32F2F)
-                        else if (msg.isUser) MaterialTheme.colorScheme.primary
+                        else if (msg.isUser) threadColor
                         else MaterialTheme.colorScheme.surfaceVariant
-                val textColor = if (msg.isUser) Color.Black else MaterialTheme.colorScheme.onSurface
+                    val textColor = if (msg.isUser) Color.White else MaterialTheme.colorScheme.onSurface
 
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = align) {
-                    Surface(
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = align) {
+                        Surface(
                             color = bubbleColor,
-                            shape =
-                                    RoundedCornerShape(
-                                            topStart = 20.dp,
-                                            topEnd = 20.dp,
-                                            bottomStart = if (msg.isUser) 20.dp else 4.dp,
-                                            bottomEnd = if (msg.isUser) 4.dp else 20.dp
-                                    ),
+                            shape = RoundedCornerShape(
+                                topStart = 20.dp, topEnd = 20.dp,
+                                bottomStart = if (msg.isUser) 20.dp else 4.dp,
+                                bottomEnd = if (msg.isUser) 4.dp else 20.dp
+                            ),
                             tonalElevation = 4.dp,
                             shadowElevation = 2.dp,
-                            modifier =
-                                    Modifier.widthIn(max = 300.dp)
-                                            .combinedClickable(
-                                                    onLongClick = {
-                                                        onMessagesChange(
-                                                                messages.filter { it != msg }
-                                                        )
-                                                    },
-                                                    onClick = {}
-                                            )
-                    ) {
-                        Text(
+                            modifier = Modifier.widthIn(max = 300.dp)
+                                .combinedClickable(
+                                    onLongClick = {
+                                        val updated = threadMessages.toMutableMap()
+                                        updated[currentThreadId] = currentMessages.filter { it != msg }
+                                        threadMessages = updated
+                                        if (currentThreadId == "main") onMessagesChange(updated["main"] ?: emptyList())
+                                    },
+                                    onClick = {}
+                                )
+                        ) {
+                            Text(
                                 msg.text,
                                 modifier = Modifier.padding(14.dp),
                                 color = textColor,
                                 fontSize = 16.sp,
                                 lineHeight = 22.sp
-                        )
+                            )
+                        }
                     }
                 }
-            }
-            if (isLoading) {
-                item {
-                    Text(
-                            "Jarvis analyse...",
-                            color = Color.Gray,
-                            modifier = Modifier.padding(16.dp)
-                    )
+                if (isLoading) {
+                    item {
+                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = threadColor)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Jarvis réfléchit...", color = Color.Gray, fontSize = 14.sp)
+                        }
+                    }
                 }
+                item { Spacer(modifier = Modifier.height(8.dp)) }
             }
-        }
-        Row(
-                modifier =
-                        Modifier.fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surface)
-                                .padding(16.dp)
-                                .navigationBarsPadding(),
+
+            // Barre de saisie
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(16.dp)
+                    .navigationBarsPadding(),
                 verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
+            ) {
+                OutlinedTextField(
                     value = input,
                     onValueChange = { input = it },
                     modifier = Modifier.weight(1f),
                     placeholder = {
                         Text(
-                                "Parler à Jarvis...",
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            if (currentThreadId == "main") "Parler à Jarvis..."
+                            else "Parler dans ${currentThreadId.replace("_", " ")}...",
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                         )
                     },
                     shape = RoundedCornerShape(28.dp),
-                    colors =
-                            TextFieldDefaults.outlinedTextFieldColors(
-                                    containerColor =
-                                            MaterialTheme.colorScheme.primaryContainer.copy(
-                                                    alpha = 0.5f
-                                            ),
-                                    unfocusedBorderColor = Color.Transparent,
-                                    focusedBorderColor =
-                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                            ),
+                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedBorderColor = threadColor.copy(alpha = 0.5f)
+                    ),
                     maxLines = 4
-            )
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Surface(
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Surface(
                     onClick = {
                         if (input.isNotBlank() && !isLoading) {
                             val userMsg = input
-                            val newMessages = messages + ChatMessage(userMsg, true)
-                            onMessagesChange(newMessages)
+                            val updatedWithUser = currentMessages + ChatMessage(userMsg, true)
+                            val updated = threadMessages.toMutableMap()
+                            updated[currentThreadId] = updatedWithUser
+                            threadMessages = updated
+                            if (currentThreadId == "main") onMessagesChange(updatedWithUser)
                             input = ""
                             isLoading = true
                             coroutineScope.launch {
                                 try {
-                                    val prefs =
-                                            context.getSharedPreferences(
-                                                    "CortexPrefs",
-                                                    Context.MODE_PRIVATE
-                                            )
+                                    val prefs = context.getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
                                     var token = prefs.getString("google_id_token", null)
-
-                                    // Rafraîchissement automatique du token
                                     val freshToken = onRefreshToken()
                                     if (freshToken != null) token = freshToken
-
                                     val name = googleAccount?.displayName ?: "Antoine"
-                                    val response =
-                                            JarvisApiClient.apiService.sendMessage(
-                                                    ChatRequest(userMsg, token, name, lat, lng)
-                                            )
-                                    onMessagesChange(
-                                            newMessages +
-                                                    ChatMessage(
-                                                            response.response
-                                                                    ?: response.text
-                                                                            ?: "Aucune réponse.",
-                                                            false
-                                                    )
+                                    val response = JarvisApiClient.apiService.sendMessage(
+                                        ChatRequest(userMsg, token, name, lat, lng, currentThreadId)
                                     )
+                                    val jarvisMsg = ChatMessage(
+                                        response.response ?: response.text ?: "Aucune réponse.", false
+                                    )
+                                    val withResponse = updatedWithUser + jarvisMsg
+                                    val updatedFinal = threadMessages.toMutableMap()
+                                    updatedFinal[currentThreadId] = withResponse
+                                    threadMessages = updatedFinal
+                                    if (currentThreadId == "main") onMessagesChange(withResponse)
                                 } catch (e: Exception) {
-                                    val errorMsg = "Erreur de connexion au serveur."
-                                    onMessagesChange(
-                                            newMessages +
-                                                    ChatMessage(errorMsg, false, isError = true)
-                                    )
+                                    val errMsg = ChatMessage("Erreur de connexion au serveur.", false, isError = true)
+                                    val updatedErr = threadMessages.toMutableMap()
+                                    updatedErr[currentThreadId] = updatedWithUser + errMsg
+                                    threadMessages = updatedErr
+                                    if (currentThreadId == "main") onMessagesChange(updatedWithUser + errMsg)
                                 } finally {
                                     isLoading = false
                                 }
@@ -908,30 +1110,23 @@ fun JarvisScreen(
                         }
                     },
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = threadColor,
                     modifier = Modifier.size(52.dp),
                     enabled = input.isNotBlank() && !isLoading
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = Color.Black,
-                                strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text(
-                                "↑",
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.Black
-                        )
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (isLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                        } else {
+                            Text("↑", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
                     }
                 }
             }
         }
     }
 }
+
 
 @Composable
 fun SettingsScreen(
