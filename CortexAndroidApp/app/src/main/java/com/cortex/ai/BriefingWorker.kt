@@ -24,7 +24,13 @@ class BriefingWorker(context: Context, params: WorkerParameters) : CoroutineWork
             val prompt = "Génère un briefing matinal complet pour $name en analysant ces notifications récentes : $recentNotifs. Sois poli et efficace comme un majordome britannique."
             
             // Appel API Jarvis (avec le jeton pour accéder au Calendrier/Gmail)
-            val response = JarvisApiClient.apiService.sendMessage(ChatRequest(prompt, token, name))
+            val response = JarvisApiClient.apiService.sendMessage(
+                ChatRequest(
+                    prompt = prompt,
+                    googleToken = token,
+                    userName = name
+                )
+            )
             val briefing = response.response ?: response.text ?: "Impossible de générer le briefing."
 
             showNotification("☕ Ton Briefing Jarvis, $name", briefing)

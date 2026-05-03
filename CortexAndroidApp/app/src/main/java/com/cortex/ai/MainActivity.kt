@@ -63,15 +63,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 // --- Modèles ---
-enum class ThemeMode {
-    SYSTEM,
-    LIGHT,
-    DARK
-}
-
-data class ChatMessage(val text: String, val isUser: Boolean, val isError: Boolean = false)
-
-data class TaskItem(val name: String, val score: Double)
+// Supprimés car déplacés dans Models.kt
 
 class MainActivity : ComponentActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -1089,7 +1081,14 @@ fun JarvisScreen(
                                     if (freshToken != null) token = freshToken
                                     val name = googleAccount?.displayName ?: "Antoine"
                                     val response = JarvisApiClient.apiService.sendMessage(
-                                        ChatRequest(userMsg, token, name, lat, lng, currentThreadId)
+                                        ChatRequest(
+                                            prompt = userMsg,
+                                            googleToken = token,
+                                            userName = name,
+                                            lat = lat,
+                                            lng = lng,
+                                            threadId = currentThreadId
+                                        )
                                     )
                                     val jarvisMsg = ChatMessage(
                                         response.response ?: response.text ?: "Aucune réponse.", false

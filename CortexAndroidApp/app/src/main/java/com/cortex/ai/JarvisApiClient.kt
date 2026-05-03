@@ -8,29 +8,13 @@ import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
 
-// Modèles de données
-data class ChatRequest(
-    val prompt: String, 
-    val google_token: String? = null, 
-    val user_name: String? = "Antoine",
-    val lat: Double? = null,
-    val lng: Double? = null,
-    val thread_id: String? = "main"
-)
-data class ChatResponse(val response: String?, val text: String?)
-data class ThreadResponse(val threads: List<String>)
-data class GithubRelease(val tag_name: String, val html_url: String)
-data class JarvisNotification(val title: String, val message: String, val timestamp: String)
-data class NotificationResponse(val notifications: List<JarvisNotification>)
-
-data class ApiMessage(val role: String, val content: String)
-data class HistoryResponse(val history: List<ApiMessage>)
-
 // Interfaces Retrofit
 interface GithubApiService {
     @GET("repos/adr2801/CortexAI/releases/latest")
     suspend fun getLatestRelease(): GithubRelease
 }
+
+data class GithubRelease(val tag_name: String, val html_url: String)
 
 interface JarvisApiService {
     @POST("/chat")
