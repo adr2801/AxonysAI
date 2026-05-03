@@ -148,14 +148,14 @@ class MainActivity : ComponentActivity() {
         val initialMessages =
                 if (chatHistory != null) {
                     try {
-                        Gson().fromJson<List<ChatMessage>>(
+                        Gson().fromJson<List<CortexMessage>>(
                                         chatHistory,
-                                        object : TypeToken<List<ChatMessage>>() {}.type
+                                        object : TypeToken<List<CortexMessage>>() {}.type
                                 )
                     } catch (e: Exception) {
-                        listOf(ChatMessage("Bonjour Antoine. Les systèmes sont en ligne.", false))
+                        listOf(CortexMessage("Bonjour Antoine. Les systèmes sont en ligne.", false))
                     }
-                } else listOf(ChatMessage("Bonjour Antoine. Les systèmes sont en ligne.", false))
+                } else listOf(CortexMessage("Bonjour Antoine. Les systèmes sont en ligne.", false))
 
         val savedTasks = prefs.getString("prioritized_tasks", null)
         val initialTasks =
@@ -212,7 +212,7 @@ class MainActivity : ComponentActivity() {
                             notifs.forEach { notif ->
                                 showNativeNotification(this@MainActivity, notif.title, notif.message)
                                 // Ajout automatique à la discussion
-                                val chatNotif = ChatMessage("🔔 **${notif.title}**\n${notif.message}", false)
+                                val chatNotif = CortexMessage("🔔 **${notif.title}**\n${notif.message}", false)
                                 chatMessages = chatMessages + chatNotif
                             }
                             JarvisApiClient.apiService.clearNotifications()
@@ -474,14 +474,14 @@ fun MainScreen(
         iaPrioriseur: MlpPrioriseur,
         themeMode: ThemeMode,
         isBriefingEnabled: Boolean,
-        chatMessages: List<ChatMessage>,
+        chatMessages: List<CortexMessage>,
         prioritizedTasks: List<TaskItem>,
         googleAccount: GoogleSignInAccount?,
         lat: Double?,
         lng: Double?,
         onThemeChange: (ThemeMode) -> Unit,
         onBriefingToggle: (Boolean) -> Unit,
-        onMessagesChange: (List<ChatMessage>) -> Unit,
+        onMessagesChange: (List<CortexMessage>) -> Unit,
         onTasksChange: (List<TaskItem>) -> Unit,
         onGoogleSignIn: () -> Unit,
         onGoogleSignOut: () -> Unit,
@@ -771,11 +771,11 @@ fun PrioritizerScreen(
 )
 @Composable
 fun JarvisScreen(
-        messages: List<ChatMessage>,
+        messages: List<CortexMessage>,
         googleAccount: GoogleSignInAccount?,
         lat: Double?,
         lng: Double?,
-        onMessagesChange: (List<ChatMessage>) -> Unit,
+        onMessagesChange: (List<CortexMessage>) -> Unit,
         onRefreshToken: suspend () -> String?
 ) {
     var input by remember { mutableStateOf("") }
@@ -1066,7 +1066,7 @@ fun JarvisScreen(
                     onClick = {
                         if (input.isNotBlank() && !isLoading) {
                             val userMsg = input
-                            val updatedWithUser = currentMessages + ChatMessage(userMsg, true)
+                            val updatedWithUser = currentMessages + CortexMessage(userMsg, true)
                             val updated = threadMessages.toMutableMap()
                             updated[currentThreadId] = updatedWithUser
                             threadMessages = updated
@@ -1081,7 +1081,7 @@ fun JarvisScreen(
                                     if (freshToken != null) token = freshToken
                                     val name = googleAccount?.displayName ?: "Antoine"
                                     val response = JarvisApiClient.apiService.sendMessage(
-                                        ChatRequest(
+                                        CortexRequest(
                                             prompt = userMsg,
                                             googleToken = token,
                                             userName = name,
@@ -1090,7 +1090,7 @@ fun JarvisScreen(
                                             threadId = currentThreadId
                                         )
                                     )
-                                    val jarvisMsg = ChatMessage(
+                                    val jarvisMsg = CortexMessage(
                                         response.response ?: response.text ?: "Aucune réponse.", false
                                     )
                                     val withResponse = updatedWithUser + jarvisMsg
@@ -1099,7 +1099,7 @@ fun JarvisScreen(
                                     threadMessages = updatedFinal
                                     if (currentThreadId == "main") onMessagesChange(withResponse)
                                 } catch (e: Exception) {
-                                    val errMsg = ChatMessage("Erreur de connexion au serveur.", false, isError = true)
+                                    val errMsg = CortexMessage("Erreur de connexion au serveur.", false, isError = true)
                                     val updatedErr = threadMessages.toMutableMap()
                                     updatedErr[currentThreadId] = updatedWithUser + errMsg
                                     threadMessages = updatedErr

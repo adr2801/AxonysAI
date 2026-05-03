@@ -18,16 +18,16 @@ data class GithubRelease(val tag_name: String, val html_url: String)
 
 interface JarvisApiService {
     @POST("/chat")
-    suspend fun sendMessage(@Body request: ChatRequest): ChatResponse
+    suspend fun sendMessage(@Body request: CortexRequest): CortexResponse
 
     @POST("/anticipate")
-    suspend fun anticipate(@Body request: ChatRequest): ChatResponse
+    suspend fun anticipate(@Body request: CortexRequest): CortexResponse
 
     @GET("/threads")
     suspend fun getThreads(): ThreadResponse
 
     @GET("/history/{thread_id}")
-    suspend fun getHistory(@Path("thread_id") threadId: String, @Query("google_token") token: String?): HistoryResponse
+    suspend fun getHistory(@Path("thread_id") threadId: String, @Query("google_token") token: String?): CortexHistoryResponse
 
     @GET("/notifications")
     suspend fun getNotifications(): NotificationResponse

@@ -8,7 +8,7 @@ enum class ThemeMode {
     DARK
 }
 
-data class ChatMessage(
+data class CortexMessage(
     val text: String,
     val isUser: Boolean,
     val isError: Boolean = false
@@ -19,7 +19,7 @@ data class TaskItem(
     val score: Double
 )
 
-data class ChatRequest(
+data class CortexRequest(
     val prompt: String,
     @SerializedName("google_token") val googleToken: String? = null,
     @SerializedName("user_name") val userName: String? = "Antoine",
@@ -28,7 +28,7 @@ data class ChatRequest(
     @SerializedName("thread_id") val threadId: String? = "main"
 )
 
-data class ChatResponse(
+data class CortexResponse(
     val response: String? = null,
     val text: String? = null
 )
@@ -47,6 +47,6 @@ data class NotificationResponse(
     val notifications: List<JarvisNotification>
 )
 
-data class HistoryResponse(
-    val history: List<ChatMessage>
+data class CortexHistoryResponse(
+    val history: List<CortexMessage>
 )

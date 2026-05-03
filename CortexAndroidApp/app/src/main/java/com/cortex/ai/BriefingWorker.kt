@@ -25,7 +25,7 @@ class BriefingWorker(context: Context, params: WorkerParameters) : CoroutineWork
             
             // Appel API Jarvis (avec le jeton pour accéder au Calendrier/Gmail)
             val response = JarvisApiClient.apiService.sendMessage(
-                ChatRequest(
+                CortexRequest(
                     prompt = prompt,
                     googleToken = token,
                     userName = name

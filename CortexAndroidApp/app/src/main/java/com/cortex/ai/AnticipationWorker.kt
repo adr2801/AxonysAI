@@ -21,10 +21,10 @@ class AnticipationWorker(context: Context, params: WorkerParameters) : Coroutine
             
             Log.d("JarvisAnticipate", "Déclenchement de la réflexion proactive...")
             
-            val response = JarvisApiClient.apiService.anticipate(ChatRequest(
+            val response = JarvisApiClient.apiService.anticipate(CortexRequest(
                 prompt = "Analyse proactive",
-                google_token = token,
-                user_name = name
+                googleToken = token,
+                userName = name
             ))
             
             Log.d("JarvisAnticipate", "Analyse terminée: ${response.response ?: "Ok"}")
