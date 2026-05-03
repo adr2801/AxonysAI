@@ -21,6 +21,8 @@ data class GithubRelease(val tag_name: String, val html_url: String)
 data class JarvisNotification(val title: String, val message: String, val timestamp: String)
 data class NotificationResponse(val notifications: List<JarvisNotification>)
 
+data class HistoryResponse(val history: List<ChatMessage>)
+
 // Interfaces Retrofit
 interface GithubApiService {
     @GET("repos/adr2801/CortexAI/releases/latest")
@@ -36,6 +38,9 @@ interface JarvisApiService {
 
     @GET("/threads")
     suspend fun getThreads(): ThreadResponse
+
+    @GET("/history/{thread_id}")
+    suspend fun getHistory(@Path("thread_id") threadId: String, @Query("google_token") token: String?): HistoryResponse
 
     @GET("/notifications")
     suspend fun getNotifications(): NotificationResponse
