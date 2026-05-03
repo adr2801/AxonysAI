@@ -63,15 +63,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 // --- Modèles ---
-enum class ThemeMode {
-    SYSTEM,
-    LIGHT,
-    DARK
-}
-
-data class ChatMessage(val text: String, val isUser: Boolean, val isError: Boolean = false)
-
-data class TaskItem(val name: String, val score: Double)
+// Redondances supprimées : ThemeMode, ChatMessage, TaskItem définis dans Models.kt
 
 class MainActivity : ComponentActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient

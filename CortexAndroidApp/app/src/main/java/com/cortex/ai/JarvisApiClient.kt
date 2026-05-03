@@ -16,10 +16,7 @@ data class ChatRequest(
     val thread_id: String? = "main"
 )
 data class ChatResponse(val response: String?, val text: String?)
-data class ThreadResponse(val threads: List<String>)
 data class GithubRelease(val tag_name: String, val html_url: String)
-data class JarvisNotification(val title: String, val message: String, val timestamp: String)
-data class NotificationResponse(val notifications: List<JarvisNotification>)
 
 // Interfaces Retrofit
 interface GithubApiService {
