@@ -63,15 +63,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 // --- Modèles ---
-enum class ThemeMode {
-    SYSTEM,
-    LIGHT,
-    DARK
-}
-
-data class ChatMessage(val text: String, val isUser: Boolean, val isError: Boolean = false)
-
-data class TaskItem(val name: String, val score: Double)
+// Redondances supprimées : ThemeMode, ChatMessage, TaskItem définis dans Models.kt
 
 class MainActivity : ComponentActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -220,7 +212,7 @@ class MainActivity : ComponentActivity() {
                             notifs.forEach { notif ->
                                 showNativeNotification(this@MainActivity, notif.title, notif.message)
                                 // Ajout automatique à la discussion
-                                val chatNotif = ChatMessage("🔔 **${notif.title}**\n${notif.message}", false)
+                                val chatNotif = ChatMessage(text = "🔔 **${notif.title}**\n${notif.message}", isUser = false, isError = false)
                                 chatMessages = chatMessages + chatNotif
                             }
                             JarvisApiClient.apiService.clearNotifications()
@@ -1073,7 +1065,7 @@ fun JarvisScreen(
                     onClick = {
                         if (input.isNotBlank() && !isLoading) {
                             val userMsg = input
-                            val updatedWithUser = currentMessages + ChatMessage(userMsg, true)
+                            val updatedWithUser = currentMessages + ChatMessage(text = userMsg, isUser = true, isError = false)
                             val updated = threadMessages.toMutableMap()
                             updated[currentThreadId] = updatedWithUser
                             threadMessages = updated
@@ -1091,7 +1083,7 @@ fun JarvisScreen(
                                         ChatRequest(userMsg, token, name, lat, lng, currentThreadId)
                                     )
                                     val jarvisMsg = ChatMessage(
-                                        response.response ?: response.text ?: "Aucune réponse.", false
+                                        text = response.response ?: response.text ?: "Aucune réponse.", isUser = false, isError = false
                                     )
                                     val withResponse = updatedWithUser + jarvisMsg
                                     val updatedFinal = threadMessages.toMutableMap()
@@ -1099,7 +1091,7 @@ fun JarvisScreen(
                                     threadMessages = updatedFinal
                                     if (currentThreadId == "main") onMessagesChange(withResponse)
                                 } catch (e: Exception) {
-                                    val errMsg = ChatMessage("Erreur de connexion au serveur.", false, isError = true)
+                                    val errMsg = ChatMessage("Erreur de connexion au serveur.", isUser = false, isError = true)
                                     val updatedErr = threadMessages.toMutableMap()
                                     updatedErr[currentThreadId] = updatedWithUser + errMsg
                                     threadMessages = updatedErr
