@@ -5,8 +5,21 @@ import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
-import retrofit2.http.Path
-import retrofit2.http.Query
+
+// Modèles de données
+data class ChatRequest(
+    val prompt: String, 
+    val google_token: String? = null, 
+    val user_name: String? = "Antoine",
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val thread_id: String? = "main"
+)
+data class ChatResponse(val response: String?, val text: String?)
+data class ThreadResponse(val threads: List<String>)
+data class GithubRelease(val tag_name: String, val html_url: String)
+data class JarvisNotification(val title: String, val message: String, val timestamp: String)
+data class NotificationResponse(val notifications: List<JarvisNotification>)
 
 // Interfaces Retrofit
 interface GithubApiService {
@@ -14,20 +27,15 @@ interface GithubApiService {
     suspend fun getLatestRelease(): GithubRelease
 }
 
-data class GithubRelease(val tag_name: String, val html_url: String)
-
 interface JarvisApiService {
     @POST("/chat")
-    suspend fun sendMessage(@Body request: CortexRequest): CortexResponse
+    suspend fun sendMessage(@Body request: ChatRequest): ChatResponse
 
     @POST("/anticipate")
-    suspend fun anticipate(@Body request: CortexRequest): CortexResponse
+    suspend fun anticipate(@Body request: ChatRequest): ChatResponse
 
     @GET("/threads")
     suspend fun getThreads(): ThreadResponse
-
-    @GET("/history/{thread_id}")
-    suspend fun getHistory(@Path("thread_id") threadId: String, @Query("google_token") token: String?): CortexHistoryResponse
 
     @GET("/notifications")
     suspend fun getNotifications(): NotificationResponse

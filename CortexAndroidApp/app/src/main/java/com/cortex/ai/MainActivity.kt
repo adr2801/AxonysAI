@@ -63,7 +63,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 // --- Modèles ---
-// Supprimés car déplacés dans Models.kt
+enum class ThemeMode {
+    SYSTEM,
+    LIGHT,
+    DARK
+}
+
+data class ChatMessage(val text: String, val isUser: Boolean, val isError: Boolean = false)
+
+data class TaskItem(val name: String, val score: Double)
 
 class MainActivity : ComponentActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -148,14 +156,14 @@ class MainActivity : ComponentActivity() {
         val initialMessages =
                 if (chatHistory != null) {
                     try {
-                        Gson().fromJson<List<CortexMessage>>(
+                        Gson().fromJson<List<ChatMessage>>(
                                         chatHistory,
-                                        object : TypeToken<List<CortexMessage>>() {}.type
+                                        object : TypeToken<List<ChatMessage>>() {}.type
                                 )
                     } catch (e: Exception) {
-                        listOf(CortexMessage("Bonjour Antoine. Les systèmes sont en ligne.", false))
+                        listOf(ChatMessage("Bonjour Antoine. Les systèmes sont en ligne.", false))
                     }
-                } else listOf(CortexMessage("Bonjour Antoine. Les systèmes sont en ligne.", false))
+                } else listOf(ChatMessage("Bonjour Antoine. Les systèmes sont en ligne.", false))
 
         val savedTasks = prefs.getString("prioritized_tasks", null)
         val initialTasks =
@@ -212,7 +220,7 @@ class MainActivity : ComponentActivity() {
                             notifs.forEach { notif ->
                                 showNativeNotification(this@MainActivity, notif.title, notif.message)
                                 // Ajout automatique à la discussion
-                                val chatNotif = CortexMessage("🔔 **${notif.title}**\n${notif.message}", false)
+                                val chatNotif = ChatMessage("🔔 **${notif.title}**\n${notif.message}", false)
                                 chatMessages = chatMessages + chatNotif
                             }
                             JarvisApiClient.apiService.clearNotifications()
@@ -323,9 +331,8 @@ class MainActivity : ComponentActivity() {
                         .requestProfile()
                         .requestScopes(
                                 Scope("https://www.googleapis.com/auth/gmail.readonly"),
-                                Scope("https://www.googleapis.com/auth/gmail.send"),
+                                Scope("https://www.googleapis.com/auth/calendar.readonly"),
                                 Scope("https://www.googleapis.com/auth/gmail.modify"),
-                                Scope("https://www.googleapis.com/auth/calendar"),
                                 Scope("https://www.googleapis.com/auth/documents"),
                                 Scope("https://www.googleapis.com/auth/drive.file")
                         )
@@ -340,11 +347,7 @@ class MainActivity : ComponentActivity() {
     private fun handleSignInResult(account: GoogleSignInAccount?) {
         if (account != null) {
             val scope =
-                    "oauth2:https://www.googleapis.com/auth/gmail.readonly " +
-                    "https://www.googleapis.com/auth/gmail.send " +
-                    "https://www.googleapis.com/auth/gmail.modify " +
-                    "https://www.googleapis.com/auth/calendar " +
-                    "https://www.googleapis.com/auth/drive.file"
+                    "oauth2:https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/calendar"
 
             lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 try {
@@ -474,14 +477,14 @@ fun MainScreen(
         iaPrioriseur: MlpPrioriseur,
         themeMode: ThemeMode,
         isBriefingEnabled: Boolean,
-        chatMessages: List<CortexMessage>,
+        chatMessages: List<ChatMessage>,
         prioritizedTasks: List<TaskItem>,
         googleAccount: GoogleSignInAccount?,
         lat: Double?,
         lng: Double?,
         onThemeChange: (ThemeMode) -> Unit,
         onBriefingToggle: (Boolean) -> Unit,
-        onMessagesChange: (List<CortexMessage>) -> Unit,
+        onMessagesChange: (List<ChatMessage>) -> Unit,
         onTasksChange: (List<TaskItem>) -> Unit,
         onGoogleSignIn: () -> Unit,
         onGoogleSignOut: () -> Unit,
@@ -493,6 +496,28 @@ fun MainScreen(
     var updateUrl by remember { mutableStateOf<String?>(null) }
     var activeNotification by remember { mutableStateOf<JarvisNotification?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    // Polling pour les notifications proactives
+    LaunchedEffect(googleAccount) {
+        if (googleAccount != null) {
+            while (true) {
+                try {
+                    val response = JarvisApiClient.apiService.getNotifications()
+                    if (response.notifications.isNotEmpty()) {
+                        response.notifications.forEach { notif ->
+                            showNativeNotification(context, notif.title, notif.message)
+                            // On pourrait aussi les afficher dans la liste de chat si besoin
+                        }
+                        // Une fois reçues, on demande au serveur de les effacer
+                        JarvisApiClient.apiService.clearNotifications()
+                    }
+                } catch (e: Exception) {
+                    Log.e("CortexNotif", "Erreur polling: ${e.message}")
+                }
+                kotlinx.coroutines.delay(30000) // Toutes les 30 secondes
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         try {
@@ -771,11 +796,11 @@ fun PrioritizerScreen(
 )
 @Composable
 fun JarvisScreen(
-        messages: List<CortexMessage>,
+        messages: List<ChatMessage>,
         googleAccount: GoogleSignInAccount?,
         lat: Double?,
         lng: Double?,
-        onMessagesChange: (List<CortexMessage>) -> Unit,
+        onMessagesChange: (List<ChatMessage>) -> Unit,
         onRefreshToken: suspend () -> String?
 ) {
     var input by remember { mutableStateOf("") }
@@ -790,38 +815,20 @@ fun JarvisScreen(
     var showSidebar by remember { mutableStateOf(false) }
     var showNewThreadDialog by remember { mutableStateOf(false) }
     var newThreadName by remember { mutableStateOf("") }
-    
-    // Messages par thread
+    // Messages par thread (stockés localement pour éviter de tout recharger)
     var threadMessages by remember { mutableStateOf(mapOf("main" to messages)) }
     val currentMessages = threadMessages[currentThreadId] ?: emptyList()
 
-    // Synchronisation du thread actif lors du changement de threadId
-    LaunchedEffect(currentThreadId, googleAccount) {
-        if (currentThreadId != "main" || threadMessages["main"]?.isEmpty() == true) {
-            isLoading = true
-            try {
-                val prefs = context.getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
-                val token = prefs.getString("google_id_token", null)
-                val response = JarvisApiClient.apiService.getHistory(currentThreadId, token)
-                
-                val updated = threadMessages.toMutableMap()
-                updated[currentThreadId] = response.history
-                threadMessages = updated
-                
-                if (currentThreadId == "main") onMessagesChange(response.history)
-            } catch (e: Exception) {
-                Log.e("JarvisHistory", "Erreur chargement historique $currentThreadId: ${e.message}")
-            } finally {
-                isLoading = false
-            }
-        }
+    // Synchronisation du thread "main" avec les messages partagés
+    LaunchedEffect(messages) {
+        threadMessages = threadMessages.toMutableMap().also { it["main"] = messages }
     }
 
-    // Chargement initial des threads disponibles
-    LaunchedEffect(googleAccount) {
+    // Chargement des threads disponibles depuis l'API
+    LaunchedEffect(Unit) {
         try {
             val response = JarvisApiClient.apiService.getThreads()
-            threads = response.threads.sorted()
+            threads = response.threads
         } catch (e: Exception) {
             Log.e("JarvisThreads", "Erreur chargement threads: ${e.message}")
         }
@@ -1066,7 +1073,7 @@ fun JarvisScreen(
                     onClick = {
                         if (input.isNotBlank() && !isLoading) {
                             val userMsg = input
-                            val updatedWithUser = currentMessages + CortexMessage(userMsg, true)
+                            val updatedWithUser = currentMessages + ChatMessage(userMsg, true)
                             val updated = threadMessages.toMutableMap()
                             updated[currentThreadId] = updatedWithUser
                             threadMessages = updated
@@ -1081,16 +1088,9 @@ fun JarvisScreen(
                                     if (freshToken != null) token = freshToken
                                     val name = googleAccount?.displayName ?: "Antoine"
                                     val response = JarvisApiClient.apiService.sendMessage(
-                                        CortexRequest(
-                                            prompt = userMsg,
-                                            googleToken = token,
-                                            userName = name,
-                                            lat = lat,
-                                            lng = lng,
-                                            threadId = currentThreadId
-                                        )
+                                        ChatRequest(userMsg, token, name, lat, lng, currentThreadId)
                                     )
-                                    val jarvisMsg = CortexMessage(
+                                    val jarvisMsg = ChatMessage(
                                         response.response ?: response.text ?: "Aucune réponse.", false
                                     )
                                     val withResponse = updatedWithUser + jarvisMsg
@@ -1099,7 +1099,7 @@ fun JarvisScreen(
                                     threadMessages = updatedFinal
                                     if (currentThreadId == "main") onMessagesChange(withResponse)
                                 } catch (e: Exception) {
-                                    val errMsg = CortexMessage("Erreur de connexion au serveur.", false, isError = true)
+                                    val errMsg = ChatMessage("Erreur de connexion au serveur.", false, isError = true)
                                     val updatedErr = threadMessages.toMutableMap()
                                     updatedErr[currentThreadId] = updatedWithUser + errMsg
                                     threadMessages = updatedErr
