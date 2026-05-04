@@ -8,7 +8,7 @@ enum class ThemeMode {
     DARK
 }
 
-data class ChatMessage(val text: String, val isUser: Boolean, val isError: Boolean = false)
+data class JarvisChatMessage(val text: String, val isUser: Boolean, val isError: Boolean = false)
 
 data class TaskItem(val name: String, val score: Double)
 
