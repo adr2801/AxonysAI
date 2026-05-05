@@ -60,11 +60,16 @@ class BriefingWorker(context: Context, params: WorkerParameters) : CoroutineWork
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(message)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(message)) // Pour voir tout le texte
+            .setStyle(NotificationCompat.BigTextStyle()
+                .bigText(message)
+                .setBigContentTitle(title)
+                .setSummaryText("Briefing Jarvis"))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(pendingIntent) // Ouvre l'app au clic
-            .setAutoCancel(true) // Disparaît quand on clique dessus
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
             .build()
+
 
         notificationManager.notify(1001, notification)
     }

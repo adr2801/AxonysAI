@@ -683,11 +683,16 @@ private fun showNativeNotification(context: Context, title: String, message: Str
         .setSmallIcon(R.mipmap.ic_launcher)
         .setContentTitle(title)
         .setContentText(message)
-        .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(message))
+        .setStyle(androidx.core.app.NotificationCompat.BigTextStyle()
+            .bigText(message)
+            .setBigContentTitle(title)
+            .setSummaryText("Alerte Jarvis"))
         .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+        .setCategory(androidx.core.app.NotificationCompat.CATEGORY_EVENT)
         .setContentIntent(pendingIntent)
         .setAutoCancel(true)
         .build()
+
 
     val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     
