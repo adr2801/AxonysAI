@@ -485,7 +485,7 @@ fun MainScreen(
         onRefreshToken: suspend () -> String?
 ) {
     var selectedTab by remember { mutableStateOf(0) }
-    var updateUrl by remember { mutableStateOf<String?>(null) }
+
     var activeNotification by remember { mutableStateOf<JarvisNotification?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -511,33 +511,44 @@ fun MainScreen(
         }
     }
 
+    var updateUrl by remember { mutableStateOf<String?>(null) }
+    
+    // Vérification des mises à jour au démarrage
     LaunchedEffect(Unit) {
         try {
             val release = JarvisApiClient.githubService.getLatestRelease()
-            if (release.tag_name.replace("v", "") != com.cortex.ai.BuildConfig.VERSION_NAME) {
+            val latestVersion = release.tag_name.replace("v", "")
+            val currentVersion = BuildConfig.VERSION_NAME
+            
+            if (latestVersion != currentVersion) {
                 updateUrl = release.html_url
             }
-        } catch (e: Exception) {}
+        } catch (e: Exception) {
+            Log.e("JarvisUpdate", "Erreur check maj: ${e.message}")
+        }
     }
 
     if (updateUrl != null) {
         AlertDialog(
-                onDismissRequest = { updateUrl = null },
-                title = { Text("Mise à jour disponible 🎉") },
-                text = { Text("Une nouvelle version de Cortex IA est disponible sur GitHub !") },
-                confirmButton = {
-                    Button(
-                            onClick = {
-                                context.startActivity(
-                                        Intent(Intent.ACTION_VIEW, Uri.parse(updateUrl))
-                                )
-                                updateUrl = null
-                            }
-                    ) { Text("Mettre à jour") }
-                },
-                dismissButton = { TextButton(onClick = { updateUrl = null }) { Text("Plus tard") } }
+            onDismissRequest = { updateUrl = null },
+            title = { Text("Mise à jour disponible 🎉") },
+            text = { Text("Une nouvelle version de Cortex AI est disponible sur GitHub !") },
+
+            confirmButton = {
+                Button(
+                    onClick = {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(updateUrl)))
+                        updateUrl = null
+                    }
+                ) { Text("Mettre à jour") }
+            },
+            dismissButton = {
+                TextButton(onClick = { updateUrl = null }) { Text("Plus tard") }
+            }
         )
     }
+
+
 
     Scaffold(
             bottomBar = {
@@ -980,6 +991,11 @@ fun JarvisScreen(
             }
 
             // Messages du thread actif
+            LaunchedEffect(currentMessages.size) {
+                if (currentMessages.isNotEmpty()) {
+                    listState.animateScrollToItem(currentMessages.size - 1)
+                }
+            }
             LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f).padding(horizontal = 16.dp),

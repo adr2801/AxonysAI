@@ -11,8 +11,12 @@ android {
         applicationId = "com.cortex.ai"
         minSdk = 24
         targetSdk = 34
-        versionCode = 3
-        versionName = "1.1.0"
+        versionCode = 4
+        versionName = "1.2.1"
+        setProperty("archivesBaseName", "CortexAI")
+
+
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true

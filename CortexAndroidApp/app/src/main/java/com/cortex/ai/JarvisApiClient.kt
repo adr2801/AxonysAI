@@ -24,6 +24,10 @@ interface GithubApiService {
     suspend fun getLatestRelease(): GithubRelease
 }
 
+data class ThreadResponse(val threads: List<String>)
+data class NotificationItem(val title: String, val message: String)
+data class NotificationResponse(val notifications: List<NotificationItem>)
+
 interface JarvisApiService {
     @POST("/chat")
     suspend fun sendMessage(@Body request: ChatRequest): ChatResponse
@@ -37,7 +41,7 @@ interface JarvisApiService {
     @GET("/notifications")
     suspend fun getNotifications(): NotificationResponse
 
-    @POST("notifications/clear")
+    @POST("/notifications/clear")
     suspend fun clearNotifications(): Any
 }
 
