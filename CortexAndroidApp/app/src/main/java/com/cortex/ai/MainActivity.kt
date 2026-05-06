@@ -21,11 +21,15 @@ import com.google.android.gms.location.LocationServices
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.animation.core.*
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -189,6 +193,7 @@ class MainActivity : ComponentActivity() {
             val savedMinute = prefs.getInt("briefing_minute", 0)
             var briefingHour by remember { mutableStateOf(savedHour) }
             var briefingMinute by remember { mutableStateOf(savedMinute) }
+            var isMemoryExplorerOpen by remember { mutableStateOf(false) }
 
 
             // Surveillance des changements d'Intent pour afficher les notifications cliquées
@@ -639,9 +644,26 @@ fun MainScreen(
                         onRequestNotifAccess,
                         briefingHour,
                         briefingMinute,
-                        onBriefingTimeChange
+                        onBriefingTimeChange = onBriefingTimeChange,
+                        onExploreMemory = { isMemoryExplorerOpen = true }
                     )
                 }
+            }
+
+            // Écran d'exploration de mémoire (Overlay)
+            if (isMemoryExplorerOpen) {
+                MemoryExplorerScreen(
+                    onDismiss = { isMemoryExplorerOpen = false },
+                    onDeleteFact = { fact ->
+                        lifecycleScope.launch {
+                            try {
+                                JarvisApiClient.apiService.deleteMemory(DeleteMemoryRequest(fact))
+                            } catch (e: Exception) {
+                                Log.e("MemoryDelete", "Error: ${e.message}")
+                            }
+                        }
+                    }
+                )
             }
 
             // Écran de détail de notification (Overlay)
@@ -1208,7 +1230,7 @@ fun JarvisScreen(
                                 color = textColor,
                                 fontSize = 16.sp,
                                 lineHeight = 24.sp,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Normal
                             )
                         }
                     }
@@ -1217,11 +1239,7 @@ fun JarvisScreen(
 
                 if (isLoading) {
                     item {
-                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = threadColor)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Jarvis réfléchit...", color = Color.Gray, fontSize = 14.sp)
-                        }
+                        ThinkingWave(color = threadColor)
                     }
                 }
                 item { Spacer(modifier = Modifier.height(8.dp)) }
@@ -1286,7 +1304,10 @@ fun JarvisScreen(
                                             ChatRequest(userMsg, token, name, lat, lng, currentThreadId)
                                         )
                                         val rawText = response.response ?: response.text ?: "Aucune réponse."
-                                        val cleanText = rawText.replace(Regex("\\[CONTEXTE.*?\\]\\n?", RegexOption.DOT_MATCHES_ALL), "").trim()
+                                        // Nettoyage agressif de TOUTES les balises techniques [DATE], [HEURE], [CONTEXTE], etc.
+                                        val cleanText = rawText.replace(Regex("\\[(CONTEXTE|DATE|HEURE|USER|INFO).*?\\]\\n?", RegexOption.DOT_MATCHES_ALL), "")
+                                                               .replace(Regex("\\[.*?\\]"), "") // Sécurité supplémentaire pour toute balise [ ]
+                                                               .trim()
                                         
                                         val jarvisMsg = JarvisChatMessage(text = cleanText, isUser = false, isError = false)
                                         val withResponse = updatedWithUser + jarvisMsg
@@ -1430,7 +1451,8 @@ fun SettingsScreen(
         onRequestNotifAccess: () -> Unit,
         briefingHour: Int,
         briefingMinute: Int,
-        onBriefingTimeChange: (Int, Int) -> Unit
+        onBriefingTimeChange: (Int, Int) -> Unit,
+        onExploreMemory: () -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
@@ -1497,6 +1519,21 @@ fun SettingsScreen(
                 ) { Text("Autoriser la lecture des notifications") }
             }
         }
+        Spacer(modifier = Modifier.height(24.dp))
+        Text("Intelligence & Mémoire", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Button(
+                    onClick = onExploreMemory,
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                ) {
+                    Text("🧠 Explorer ce que Jarvis sait", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
         Text("Compte Google Workspace", fontSize = 18.sp, fontWeight = FontWeight.Bold)
         Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
@@ -1610,5 +1647,182 @@ fun ThemeOptionRow(
     ) {
         RadioButton(selected = current == option, onClick = { onSelect(option) })
         Text(label, modifier = Modifier.padding(start = 8.dp))
+    }
+}
+@Composable
+fun ThinkingWave(color: Color) {
+    val infiniteTransition = rememberInfiniteTransition()
+    val waveOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 2f * Math.PI.toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        )
+    )
+
+    Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(40.dp)
+            .padding(vertical = 8.dp)
+    ) {
+        val width = size.width
+        val height = size.height
+        val points = mutableListOf<androidx.compose.ui.geometry.Offset>()
+        
+        for (x in 0..width.toInt() step 5) {
+            val relativeX = x.toFloat() / width
+            val sine = Math.sin((relativeX * 3f * Math.PI) + waveOffset).toFloat()
+            val y = height / 2f + sine * 12f
+            points.add(androidx.compose.ui.geometry.Offset(x.toFloat(), y))
+        }
+
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(points[0].x, points[0].y)
+            for (i in 1 until points.size) {
+                lineTo(points[i].x, points[i].y)
+            }
+        }
+
+        drawPath(
+            path = path,
+            color = color,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = 3.dp.toPx(),
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+        )
+        
+        // Deuxième onde décalée
+        val path2 = androidx.compose.ui.graphics.Path().apply {
+            moveTo(points[0].x, points[0].y + 4f)
+            for (i in 1 until points.size) {
+                val relativeX = points[i].x / width
+                val sine = Math.sin((relativeX * 3f * Math.PI) + waveOffset + 1f).toFloat()
+                val y = height / 2f + sine * 8f
+                lineTo(points[i].x, y)
+            }
+        }
+        
+        drawPath(
+            path = path2,
+            color = color.copy(alpha = 0.4f),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = 2.dp.toPx(),
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+        )
+    }
+}
+
+@Composable
+fun MemoryExplorerScreen(
+    onDismiss: () -> Unit,
+    onDeleteFact: (String) -> Unit
+) {
+    var memories by remember { mutableStateOf<List<MemoryFact>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        try {
+            val response = JarvisApiClient.apiService.getMemory("antoine")
+            memories = response.facts
+        } catch (e: Exception) {
+            Log.e("MemoryExplorer", "Error: ${e.message}")
+        } finally {
+            isLoading = false
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.8f))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .fillMaxHeight(0.8f)
+                .clickable(enabled = false) { }, // Prevent dismiss when clicking inside
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 8.dp
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "🧠 Mémoire de Jarvis",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Text("❌", fontSize = 16.sp)
+                    }
+                }
+                
+                Text(
+                    "Voici ce que Jarvis a retenu sur vous. Vous pouvez supprimer des faits si nécessaire.",
+                    fontSize = 13.sp,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (isLoading) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
+                } else if (memories.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Jarvis n'a pas encore mémorisé de faits spécifiques.", textAlign = TextAlign.Center, color = Color.Gray)
+                    }
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(memories) { item ->
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                border = androidx.compose.foundation.BorderStroke(0.5.dp, Color.Gray.copy(alpha = 0.1f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(item.fact, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                                        Text(
+                                            item.timestamp.split(" ")[0], 
+                                            fontSize = 11.sp, 
+                                            color = Color.Gray
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { 
+                                            onDeleteFact(item.fact)
+                                            memories = memories.filter { it.fact != item.fact }
+                                        },
+                                        modifier = Modifier.size(32.dp).background(Color.Red.copy(alpha = 0.1f), CircleShape)
+                                    ) {
+                                        Text("🗑️", fontSize = 14.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
     }
 }

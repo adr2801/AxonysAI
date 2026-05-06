@@ -20,6 +20,9 @@ data class ChatResponse(val response: String?, val text: String?)
 data class GithubRelease(val tag_name: String, val html_url: String)
 data class HistoryItem(val text: String, val isUser: Boolean)
 data class HistoryResponse(val history: List<HistoryItem>)
+data class MemoryFact(val fact: String, val timestamp: String)
+data class MemoryResponse(val facts: List<MemoryFact>)
+data class DeleteMemoryRequest(val fact: String, val user_id: String = "antoine")
 
 
 // Interfaces Retrofit
@@ -52,6 +55,11 @@ interface JarvisApiService {
         @retrofit2.http.Query("user_id") userId: String
     ): HistoryResponse
 
+    @GET("/memory")
+    suspend fun getMemory(@retrofit2.http.Query("user_id") userId: String): MemoryResponse
+
+    @POST("/memory/delete")
+    suspend fun deleteMemory(@Body request: DeleteMemoryRequest): Any
 }
 
 
