@@ -650,7 +650,7 @@ fun MainScreen(
                         briefingHour,
                         briefingMinute,
                         onBriefingTimeChange = onBriefingTimeChange,
-                        onExploreMemory = { isMemoryExplorerOpen = true }
+                        onExploreMemory = { onMemoryExplorerToggle(true) }
                     )
                 }
             }
