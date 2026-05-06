@@ -45,7 +45,9 @@ jobs:
     - name: Publier sur la page Releases (Pas de quota)
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: "v1.2.2"
+        tag_name: "v1.2.4"
+
+
 
         name: "Cortex AI(Application Android)"
         body: "Téléchargez l'application Cortex IA directement depuis cette page !"
