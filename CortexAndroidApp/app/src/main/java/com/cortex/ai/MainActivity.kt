@@ -510,9 +510,8 @@ class MainActivity : ComponentActivity() {
                     Log.e("CortexAuth", "Erreur refresh token: ${e.message}")
                     null
                 }
-            }
+        }
     }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
