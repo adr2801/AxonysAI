@@ -604,32 +604,22 @@ fun MainScreen(
 
 
     Scaffold(
-            bottomBar = {
-                NavigationBar(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 8.dp
-                ) {
-                    NavigationBarItem(
-                            selected = selectedTab == 0,
-                            onClick = { selectedTab = 0 },
-                            icon = { Icon(Icons.Default.List, contentDescription = null) },
-                            label = { Text("Focus", fontWeight = FontWeight.Medium) }
-                    )
-                    NavigationBarItem(
-                            selected = selectedTab == 1,
-                            onClick = { selectedTab = 1 },
-                            icon = { Icon(Icons.Default.Email, contentDescription = null) },
-                            label = { Text("Jarvis", fontWeight = FontWeight.Medium) }
-                    )
-                    NavigationBarItem(
-                            selected = selectedTab == 2,
-                            onClick = { selectedTab = 2 },
-                            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                            label = { Text("Paramètres", fontWeight = FontWeight.Medium) }
-                    )
-                }
-            }
+            modifier = Modifier.fillMaxSize()
     ) { padding ->
+        Box(
+                modifier =
+                        Modifier.fillMaxSize()
+                                .background(
+                                        Brush.verticalGradient(
+                                                colors = if (isSystemInDarkTheme())
+                                                    listOf(Color(0xFF0F111A), Color(0xFF1A1D2E))
+                                                else
+                                                    listOf(Color(0xFFF9FAFB), Color(0xFFF3F4F6))
+                                        )
+                                )
+        ) {
+            Crossfade(targetState = selectedTab, animationSpec = tween(400), modifier = Modifier.padding(bottom = 88.dp)) { tab ->
+
         Box(
                 modifier =
                         Modifier.fillMaxSize()
@@ -665,7 +655,6 @@ fun MainScreen(
                 }
             }
 
-
             // Écran de détail de notification (Overlay)
             activeNotification?.let { notif ->
                 NotificationDetailScreen(
@@ -673,9 +662,81 @@ fun MainScreen(
                     onDismiss = { activeNotification = null }
                 )
             }
+
+            // --- DOCK FLOTTANT PREMIUM ---
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 24.dp, vertical = 20.dp)
+                    .navigationBarsPadding()
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().height(72.dp),
+                    shape = RoundedCornerShape(36.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                    tonalElevation = 8.dp,
+                    shadowElevation = 16.dp,
+                    border = androidx.compose.foundation.BorderStroke(0.5.dp, Color.Gray.copy(alpha = 0.1f))
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val navItems = listOf("Focus", "Jarvis", "Profil")
+                        val navIcons = listOf("🧠", "🤖", "⚙️")
+                        
+                        navItems.forEachIndexed { index, label ->
+                            val isSelected = selectedTab == index
+                            val color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray
+                            
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable(
+                                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = { selectedTab = index }
+                                    ),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                // Petit point indicateur actif
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visible = isSelected,
+                                    enter = fadeIn() + expandVertically(),
+                                    exit = fadeOut() + shrinkVertically()
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(width = 20.dp, height = 3.dp)
+                                            .background(color, RoundedCornerShape(2.dp))
+                                    )
+                                }
+                                
+                                Spacer(modifier = Modifier.height(4.dp))
+                                
+                                Text(
+                                    navIcons[index], 
+                                    fontSize = if (isSelected) 22.sp else 20.sp
+                                )
+                                
+                                Text(
+                                    label, 
+                                    fontSize = 11.sp, 
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = color
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
+
 
 @Composable
 fun NotificationDetailScreen(
@@ -809,16 +870,20 @@ fun PrioritizerScreen(
             Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = { onImpromptuBriefing() },
-                modifier = Modifier.fillMaxWidth(),
-
+                modifier = Modifier.fillMaxWidth().height(56.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                shape = RoundedCornerShape(16.dp)
+                shape = RoundedCornerShape(20.dp),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
             ) {
-                Text("⚡ Briefing Impromptu")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("⚡", fontSize = 18.sp)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("Briefing Impromptu", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
             }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
             OutlinedTextField(
                     value = taskName,
                     onValueChange = { taskName = it },
@@ -853,8 +918,15 @@ fun PrioritizerScreen(
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(56.dp).padding(top = 8.dp),
-                    shape = RoundedCornerShape(16.dp)
-            ) { Text("Analyser la priorité") }
+                    shape = RoundedCornerShape(20.dp),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("🎯", fontSize = 18.sp)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("Analyser la priorité", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+            }
             Spacer(modifier = Modifier.height(24.dp))
             Text("Ma Liste de Priorités", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(modifier = Modifier.height(8.dp))
@@ -866,6 +938,42 @@ fun PrioritizerScreen(
                     exit = shrinkVertically() + fadeOut()
             ) { TaskCard(task) { onTasksChange(tasks.filter { it != task }) } }
         }
+    }
+}
+
+@Composable
+fun SliderRow(label: String, value: Float, onValueChange: (Float) -> Unit) {
+    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            Surface(
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text(
+                    value.toInt().toString(),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
+            }
+        }
+        Slider(
+                value = value,
+                onValueChange = onValueChange,
+                valueRange = 0f..10f,
+                steps = 9,
+                colors = SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                    inactiveTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                )
+        )
     }
 }
 
@@ -948,36 +1056,54 @@ fun JarvisScreen(
     if (showNewThreadDialog) {
         AlertDialog(
             onDismissRequest = { showNewThreadDialog = false },
-            title = { Text("Nouvelle Discussion", fontWeight = FontWeight.Bold) },
+            shape = RoundedCornerShape(28.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
+            title = { 
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    Text("🚀 Nouveau Canal", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Créez un espace de discussion dédié", fontSize = 12.sp, color = Color.Gray)
+                }
+            },
             text = {
                 OutlinedTextField(
                     value = newThreadName,
                     onValueChange = { newThreadName = it },
-                    label = { Text("Nom du canal (ex: 📚 NSI, 🚀 Projet...)") },
+                    placeholder = { Text("Ex: Projet NSI, Sport...") },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(16.dp),
+                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                        focusedBorderColor = threadColor,
+                        unfocusedBorderColor = Color.LightGray
+                    )
                 )
             },
             confirmButton = {
-                Button(onClick = {
-                    if (newThreadName.isNotBlank()) {
-                        val threadId = newThreadName.lowercase().replace(" ", "_")
-                        threads = threads + threadId
-                        threadMessages = threadMessages.toMutableMap().also {
-                            it[threadId] = emptyList()
+                Button(
+                    onClick = {
+                        if (newThreadName.isNotBlank()) {
+                            val threadId = newThreadName.lowercase().replace(" ", "_")
+                            threads = (threads + threadId).distinct()
+                            threadMessages = threadMessages.toMutableMap().also {
+                                it[threadId] = emptyList()
+                            }
+                            currentThreadId = threadId
+                            newThreadName = ""
+                            showNewThreadDialog = false
+                            showSidebar = false
                         }
-                        currentThreadId = threadId
-                        newThreadName = ""
-                        showNewThreadDialog = false
-                        showSidebar = false
-                    }
-                }) { Text("Créer") }
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = threadColor)
+                ) { Text("Créer l'espace", fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
-                TextButton(onClick = { showNewThreadDialog = false }) { Text("Annuler") }
+                TextButton(onClick = { showNewThreadDialog = false }) { Text("Plus tard", color = Color.Gray) }
             }
         )
     }
+
 
     Box(modifier = Modifier.fillMaxSize()) {
         // --- CHAT PRINCIPAL ---
@@ -1010,18 +1136,24 @@ fun JarvisScreen(
                         }
                     }
                     Spacer(modifier = Modifier.width(12.dp))
-                    Column {
+                    // Titre et Description
+                    Column(modifier = Modifier.padding(start = 4.dp)) {
                         Text(
                             if (currentThreadId == "main") "JARVIS" else currentThreadId.replace("_", " ").uppercase(),
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 3.sp,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 4.sp,
                             color = threadColor
                         )
-                        if (currentThreadId != "main") {
-                            Text("Sous-discussion spécialisée", fontSize = 11.sp, color = Color.Gray)
-                        }
+                        Text(
+                            if (currentThreadId == "main") "Assistant IA Personnel" else "Canal spécialisé",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.Gray,
+                            letterSpacing = 1.sp
+                        )
                     }
+
                 }
             }
 
@@ -1034,44 +1166,50 @@ fun JarvisScreen(
                 item { Spacer(modifier = Modifier.height(8.dp)) }
                 items(currentMessages) { msg ->
                     val align = if (msg.isUser) Alignment.CenterEnd else Alignment.CenterStart
-                    val bubbleColor =
-                        if (msg.isError) Color(0xFFD32F2F)
-                        else if (msg.isUser) threadColor
-                        else MaterialTheme.colorScheme.surfaceVariant
+                    
+                    // Dégradés premium pour les bulles
+                    val bubbleBrush = if (msg.isUser) {
+                        Brush.linearGradient(listOf(threadColor, threadColor.copy(alpha = 0.85f)))
+                    } else {
+                        Brush.linearGradient(listOf(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)))
+                    }
+                    
                     val textColor = if (msg.isUser) Color.White else MaterialTheme.colorScheme.onSurface
 
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = align) {
                         Surface(
-                            color = bubbleColor,
+                            brush = bubbleBrush,
                             shape = RoundedCornerShape(
-                                topStart = 20.dp, topEnd = 20.dp,
-                                bottomStart = if (msg.isUser) 20.dp else 4.dp,
-                                bottomEnd = if (msg.isUser) 4.dp else 20.dp
+                                topStart = 24.dp, topEnd = 24.dp,
+                                bottomStart = if (msg.isUser) 24.dp else 4.dp,
+                                bottomEnd = if (msg.isUser) 4.dp else 24.dp
                             ),
-                            tonalElevation = 4.dp,
-                            shadowElevation = 2.dp,
-                            modifier = Modifier.widthIn(max = 300.dp)
+                            border = androidx.compose.foundation.BorderStroke(0.5.dp, if(msg.isUser) Color.White.copy(alpha = 0.2f) else Color.Gray.copy(alpha = 0.1f)),
+                            tonalElevation = 2.dp,
+                            shadowElevation = 4.dp,
+                            modifier = Modifier.widthIn(max = 310.dp)
+                                .padding(vertical = 2.dp)
                                 .combinedClickable(
                                     onLongClick = {
                                         val updated = threadMessages.toMutableMap()
                                         updated[currentThreadId] = currentMessages.filter { it != msg }
                                         threadMessages = updated
-                                        // Update the shared state if it's the main thread
-                                        // This is a bit complex due to shared state but works for local UI
                                     },
                                     onClick = {}
                                 )
                         ) {
                             Text(
                                 msg.text,
-                                modifier = Modifier.padding(14.dp),
+                                modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
                                 color = textColor,
                                 fontSize = 16.sp,
-                                lineHeight = 22.sp
+                                lineHeight = 24.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         }
                     }
                 }
+
                 if (isLoading) {
                     item {
                         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1084,91 +1222,102 @@ fun JarvisScreen(
                 item { Spacer(modifier = Modifier.height(8.dp)) }
             }
 
-            // Barre de saisie
-            Row(
+            // Barre de saisie "Flottante"
+            Surface(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
                     .padding(16.dp)
-                    .navigationBarsPadding(),
-                verticalAlignment = Alignment.CenterVertically
+                    .navigationBarsPadding()
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(32.dp),
+                tonalElevation = 8.dp,
+                shadowElevation = 12.dp,
+                color = MaterialTheme.colorScheme.surface
             ) {
-                OutlinedTextField(
-                    value = input,
-                    onValueChange = { input = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = {
-                        Text(
-                            if (currentThreadId == "main") "Parler à Jarvis..."
-                            else "Parler dans ${currentThreadId.replace("_", " ")}...",
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                        )
-                    },
-                    shape = RoundedCornerShape(28.dp),
-                    colors = TextFieldDefaults.outlinedTextFieldColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                        unfocusedBorderColor = Color.Transparent,
-                        focusedBorderColor = threadColor.copy(alpha = 0.5f)
-                    ),
-                    maxLines = 4
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Surface(
-                    onClick = {
-                        if (input.isNotBlank() && !isLoading) {
-                            val userMsg = input
-                            val updatedWithUser = currentMessages + JarvisChatMessage(text = userMsg, isUser = true, isError = false)
-                            val updated = threadMessages.toMutableMap()
-                            updated[currentThreadId] = updatedWithUser
-                            threadMessages = updated
-                            if (currentThreadId == "main") onMessagesChange(updatedWithUser)
-                            input = ""
-                            isLoading = true
-                            coroutineScope.launch {
-                                try {
-                                    val prefs = context.getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
-                                    var token = prefs.getString("google_id_token", null)
-                                    val freshToken = onRefreshToken()
-                                    if (freshToken != null) token = freshToken
-                                    val name = googleAccount?.displayName ?: "Antoine"
-                                    val response = JarvisApiClient.apiService.sendMessage(
-                                        ChatRequest(userMsg, token, name, lat, lng, currentThreadId)
-                                    )
-                                    val jarvisMsg = JarvisChatMessage(
-                                        text = response.response ?: response.text ?: "Aucune réponse.", isUser = false, isError = false
-                                    )
-                                    val withResponse = updatedWithUser + jarvisMsg
-                                    val updatedFinal = threadMessages.toMutableMap()
-                                    updatedFinal[currentThreadId] = withResponse
-                                    threadMessages = updatedFinal
-                                    if (currentThreadId == "main") onMessagesChange(withResponse)
-                                } catch (e: Exception) {
-                                    val errMsg = JarvisChatMessage("Erreur de connexion au serveur.", isUser = false, isError = true)
-                                    val updatedErr = threadMessages.toMutableMap()
-                                    updatedErr[currentThreadId] = updatedWithUser + errMsg
-                                    threadMessages = updatedErr
-                                    if (currentThreadId == "main") onMessagesChange(updatedWithUser + errMsg)
-                                } finally {
-                                    isLoading = false
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = { input = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = {
+                            Text(
+                                if (currentThreadId == "main") "Demander quelque chose..."
+                                else "Message dans ${currentThreadId.replace("_", " ")}...",
+                                color = Color.Gray
+                            )
+                        },
+                        shape = RoundedCornerShape(28.dp),
+                        colors = TextFieldDefaults.outlinedTextFieldColors(
+                            containerColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedBorderColor = Color.Transparent
+                        ),
+                        maxLines = 6
+                    )
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    Surface(
+                        onClick = {
+                            if (input.isNotBlank() && !isLoading) {
+                                val userMsg = input
+                                val updatedWithUser = currentMessages + JarvisChatMessage(text = userMsg, isUser = true, isError = false)
+                                val updated = threadMessages.toMutableMap()
+                                updated[currentThreadId] = updatedWithUser
+                                threadMessages = updated
+                                if (currentThreadId == "main") onMessagesChange(updatedWithUser)
+                                input = ""
+                                isLoading = true
+                                coroutineScope.launch {
+                                    try {
+                                        val prefs = context.getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
+                                        var token = prefs.getString("google_id_token", null)
+                                        val freshToken = onRefreshToken()
+                                        if (freshToken != null) token = freshToken
+                                        val name = googleAccount?.displayName ?: "Antoine"
+                                        val response = JarvisApiClient.apiService.sendMessage(
+                                            ChatRequest(userMsg, token, name, lat, lng, currentThreadId)
+                                        )
+                                        val rawText = response.response ?: response.text ?: "Aucune réponse."
+                                        val cleanText = rawText.replace(Regex("\\[CONTEXTE.*?\\]\\n?", RegexOption.DOT_MATCHES_ALL), "").trim()
+                                        
+                                        val jarvisMsg = JarvisChatMessage(text = cleanText, isUser = false, isError = false)
+                                        val withResponse = updatedWithUser + jarvisMsg
+                                        val updatedFinal = threadMessages.toMutableMap()
+                                        updatedFinal[currentThreadId] = withResponse
+                                        threadMessages = updatedFinal
+                                        if (currentThreadId == "main") onMessagesChange(withResponse)
+                                    } catch (e: Exception) {
+                                        val errMsg = JarvisChatMessage("Erreur de connexion.", isUser = false, isError = true)
+                                        val updatedErr = threadMessages.toMutableMap()
+                                        updatedErr[currentThreadId] = updatedWithUser + errMsg
+                                        threadMessages = updatedErr
+                                        if (currentThreadId == "main") onMessagesChange(updatedWithUser + errMsg)
+                                    } finally {
+                                        isLoading = false
+                                    }
                                 }
                             }
-                        }
-                    },
-                    shape = CircleShape,
-                    color = threadColor,
-                    modifier = Modifier.size(52.dp),
-                    enabled = input.isNotBlank() && !isLoading
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        if (isLoading) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
-                        } else {
-                            Text("↑", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        },
+                        shape = CircleShape,
+                        color = threadColor,
+                        modifier = Modifier.size(48.dp),
+                        enabled = input.isNotBlank() && !isLoading
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            if (isLoading) {
+                                CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+                            } else {
+                                Text("↑", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
                         }
                     }
                 }
             }
         }
+
 
         // --- VOILE DE FOND (Scrim) ---
         androidx.compose.animation.AnimatedVisibility(
@@ -1207,8 +1356,16 @@ fun JarvisScreen(
 
                     threads.forEach { threadId ->
                         val isSelected = threadId == currentThreadId
-                        val displayName = if (threadId == "main") "🏠 Général" 
-                                          else "📌 ${threadId.replace("_", " ").replaceFirstChar { it.uppercase() }}"
+                        val icon = when {
+                            threadId == "main" -> "🏠"
+                            threadId.contains("briefing") -> "⚡"
+                            threadId.contains("dev") -> "🛠️"
+                            threadId.contains("nsi") -> "💻"
+                            threadId.contains("projet") -> "🚀"
+                            else -> "📌"
+                        }
+                        val displayName = if (threadId == "main") "Général" 
+                                          else threadId.replace("_", " ").replaceFirstChar { it.uppercase() }
 
                         Surface(
                             onClick = {
@@ -1218,16 +1375,24 @@ fun JarvisScreen(
                             shape = RoundedCornerShape(12.dp),
                             color = if (isSelected) threadColor.copy(alpha = 0.2f)
                                     else Color.Transparent,
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
                         ) {
-                            Text(
-                                displayName,
+                            Row(
                                 modifier = Modifier.padding(12.dp),
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) threadColor else MaterialTheme.colorScheme.onSurface
-                            )
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(icon, fontSize = 18.sp)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    displayName,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) threadColor else MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 15.sp
+                                )
+                            }
                         }
                     }
+
 
                     Spacer(modifier = Modifier.weight(1f))
 
@@ -1381,49 +1546,51 @@ fun SettingsScreen(
 
 @Composable
 fun TaskCard(task: TaskItem, onDelete: () -> Unit) {
-    val colors =
-            if (task.score >= 70) listOf(Color(0xFFFF5252), Color(0xFFFF1744))
-            else if (task.score >= 40) listOf(Color(0xFFFFB300), Color(0xFFFF8F00))
-            else listOf(Color(0xFF00E676), Color(0xFF00C853))
+    val accentColor =
+            if (task.score >= 70) Color(0xFFFF5252)
+            else if (task.score >= 40) Color(0xFFFFB300)
+            else Color(0xFF00E676)
+            
     Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.cardElevation(4.dp)
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
-                modifier =
-                        Modifier.background(Brush.horizontalGradient(colors))
-                                .padding(16.dp)
-                                .fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
                 verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(task.name, color = Color.White, modifier = Modifier.weight(1f))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${task.score.toInt()}%", color = Color.White, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.width(8.dp))
-                IconButton(onClick = onDelete, modifier = Modifier.size(24.dp)) { Text("✅") }
+            // Barre de priorité sur le côté
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(6.dp)
+                    .background(accentColor)
+            )
+            
+            Row(
+                modifier = Modifier.padding(16.dp).weight(1f),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(task.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Priorité : ${task.score.toInt()}%", fontSize = 12.sp, color = Color.Gray)
+                }
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.background(accentColor.copy(alpha = 0.1f), CircleShape)
+                ) { 
+                    Text("✅", fontSize = 16.sp) 
+                }
             }
         }
     }
 }
 
-@Composable
-fun SliderRow(label: String, value: Float, onValueChange: (Float) -> Unit) {
-    Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().height(40.dp)
-    ) {
-        Text(label, modifier = Modifier.weight(1f), fontSize = 13.sp)
-        Slider(
-                value = value,
-                onValueChange = onValueChange,
-                valueRange = 0f..10f,
-                steps = 10,
-                modifier = Modifier.weight(2f)
-        )
-    }
-}
+
+
 
 @Composable
 fun ThemeOptionRow(
