@@ -300,8 +300,13 @@ class MainActivity : ComponentActivity() {
                             onBriefingToggle = {
                                 isBriefingEnabled = it
                                 prefs.edit().putBoolean("briefing_enabled", it).apply()
-                                toggleBriefingWorker(it)
+                                if (it) {
+                                    toggleBriefingWorker(true, briefingHour, briefingMinute)
+                                } else {
+                                    toggleBriefingWorker(false)
+                                }
                             },
+
                             onMessagesChange = {
                                 JarvisChatMessages = it
                                 prefs.edit().putString("chat_history", Gson().toJson(it)).apply()
@@ -803,8 +808,9 @@ fun PrioritizerScreen(
             }
             Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = { triggerImpromptuBriefing() },
+                onClick = { onImpromptuBriefing() },
                 modifier = Modifier.fillMaxWidth(),
+
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
                 shape = RoundedCornerShape(16.dp)
             ) {
@@ -1260,13 +1266,10 @@ fun SettingsScreen(
                                 onBriefingToggle(it)
                                 if (it) {
                                     onRequestNotifPermission()
-                                    toggleBriefingWorker(true, briefingHour, briefingMinute)
-                                } else {
-                                    toggleBriefingWorker(false)
                                 }
-
                             }
                     )
+
                 }
                 if (isBriefingEnabled) {
                     Spacer(modifier = Modifier.height(8.dp))
