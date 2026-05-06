@@ -181,6 +181,13 @@ class MainActivity : ComponentActivity() {
             var activeNotification by remember {
                 mutableStateOf<JarvisNotification?>(null)
             }
+            
+            // Heure du briefing
+            val savedHour = prefs.getInt("briefing_hour", 8)
+            val savedMinute = prefs.getInt("briefing_minute", 0)
+            var briefingHour by remember { mutableStateOf(savedHour) }
+            var briefingMinute by remember { mutableStateOf(savedMinute) }
+
 
             // Surveillance des changements d'Intent pour afficher les notifications cliquées
             LaunchedEffect(intent) {
@@ -309,8 +316,20 @@ class MainActivity : ComponentActivity() {
                             onGoogleSignOut = { signOutGoogle() },
                             onRequestNotifPermission = { checkAndRequestNotifPermission() },
                             onRequestNotifAccess = { openNotificationAccessSettings() },
-                            onRefreshToken = { googleAccount?.let { getFreshAccessToken(it) } }
+                            onRefreshToken = { googleAccount?.let { getFreshAccessToken(it) } },
+                            briefingHour = briefingHour,
+                            briefingMinute = briefingMinute,
+                            onBriefingTimeChange = { h, m ->
+                                prefs.edit().putInt("briefing_hour", h).putInt("briefing_minute", m).apply()
+                                briefingHour = h
+                                briefingMinute = m
+                                if (isBriefingEnabled) {
+                                    toggleBriefingWorker(true, h, m)
+                                }
+                            },
+                            onImpromptuBriefing = { triggerImpromptuBriefing() }
                     )
+
                 }
             }
         }
@@ -397,12 +416,25 @@ class MainActivity : ComponentActivity() {
         startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
     }
 
-    private fun toggleBriefingWorker(enabled: Boolean) {
+    private fun toggleBriefingWorker(enabled: Boolean, hour: Int = 8, minute: Int = 0) {
         val workManager = WorkManager.getInstance(this)
         if (enabled) {
+            val calendar = java.util.Calendar.getInstance()
+            val now = calendar.timeInMillis
+            
+            calendar.set(java.util.Calendar.HOUR_OF_DAY, hour)
+            calendar.set(java.util.Calendar.MINUTE, minute)
+            calendar.set(java.util.Calendar.SECOND, 0)
+            
+            if (calendar.timeInMillis <= now) {
+                calendar.add(java.util.Calendar.DAY_OF_YEAR, 1)
+            }
+            
+            val delay = calendar.timeInMillis - now
+            
             val briefingRequest =
                     PeriodicWorkRequestBuilder<BriefingWorker>(24, TimeUnit.HOURS)
-                            .setInitialDelay(1, TimeUnit.MINUTES)
+                            .setInitialDelay(delay, TimeUnit.MILLISECONDS)
                             .addTag("morning_briefing")
                             .build()
             workManager.enqueueUniquePeriodicWork(
@@ -410,10 +442,21 @@ class MainActivity : ComponentActivity() {
                     ExistingPeriodicWorkPolicy.UPDATE,
                     briefingRequest
             )
+            Log.d("JarvisBriefing", "Briefing programmé à ${hour}h${minute} (Délai: ${delay/60000} min)")
         } else {
             workManager.cancelUniqueWork("morning_briefing")
         }
     }
+
+    private fun triggerImpromptuBriefing() {
+        val workManager = WorkManager.getInstance(this)
+        val immediateRequest = OneTimeWorkRequestBuilder<BriefingWorker>()
+            .addTag("impromptu_briefing")
+            .build()
+        workManager.enqueue(immediateRequest)
+        android.widget.Toast.makeText(this, "⚡ Jarvis prépare ton briefing impromptu...", android.widget.Toast.LENGTH_SHORT).show()
+    }
+
 
     private fun toggleAnticipationWorker(enabled: Boolean) {
         val workManager = WorkManager.getInstance(this)
@@ -482,8 +525,13 @@ fun MainScreen(
         onGoogleSignOut: () -> Unit,
         onRequestNotifPermission: () -> Unit,
         onRequestNotifAccess: () -> Unit,
-        onRefreshToken: suspend () -> String?
+        onRefreshToken: suspend () -> String?,
+        briefingHour: Int,
+        briefingMinute: Int,
+        onBriefingTimeChange: (Int, Int) -> Unit,
+        onImpromptuBriefing: () -> Unit
 ) {
+
     var selectedTab by remember { mutableStateOf(0) }
 
     var activeNotification by remember { mutableStateOf<JarvisNotification?>(null) }
@@ -592,7 +640,7 @@ fun MainScreen(
         ) {
             Crossfade(targetState = selectedTab, animationSpec = tween(400)) { tab ->
                 when (tab) {
-                    0 -> PrioritizerScreen(iaPrioriseur, prioritizedTasks, onTasksChange)
+                    0 -> PrioritizerScreen(iaPrioriseur, prioritizedTasks, onTasksChange, onImpromptuBriefing)
                     1 -> JarvisScreen(JarvisChatMessages, googleAccount, lat, lng, onMessagesChange, onRefreshToken)
                     2 ->
                             SettingsScreen(
@@ -604,10 +652,14 @@ fun MainScreen(
                                     onGoogleSignIn,
                                     onGoogleSignOut,
                                     onRequestNotifPermission,
-                                    onRequestNotifAccess
+                                    onRequestNotifAccess,
+                                    briefingHour,
+                                    briefingMinute,
+                                    onBriefingTimeChange
                             )
                 }
             }
+
 
             // Écran de détail de notification (Overlay)
             activeNotification?.let { notif ->
@@ -720,8 +772,10 @@ private fun showNativeNotification(context: Context, title: String, message: Str
 fun PrioritizerScreen(
         iaPrioriseur: MlpPrioriseur,
         tasks: List<TaskItem>,
-        onTasksChange: (List<TaskItem>) -> Unit
+        onTasksChange: (List<TaskItem>) -> Unit,
+        onImpromptuBriefing: () -> Unit
 ) {
+
     var taskName by remember { mutableStateOf("") }
     var urgency by remember { mutableStateOf(5f) }
     var importance by remember { mutableStateOf(5f) }
@@ -747,7 +801,18 @@ fun PrioritizerScreen(
                 )
                 Text("v${BuildConfig.VERSION_NAME}", fontSize = 14.sp, color = Color.Gray)
             }
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = { triggerImpromptuBriefing() },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text("⚡ Briefing Impromptu")
+            }
+
             Spacer(modifier = Modifier.height(20.dp))
+
             OutlinedTextField(
                     value = taskName,
                     onValueChange = { taskName = it },
@@ -836,7 +901,8 @@ fun JarvisScreen(
     LaunchedEffect(Unit) {
         try {
             val response = JarvisApiClient.apiService.getThreads()
-            threads = response.threads
+            threads = (response.threads + "briefing").distinct()
+
         } catch (e: Exception) {
             Log.e("JarvisThreads", "Erreur chargement threads: ${e.message}")
         }
@@ -1152,9 +1218,14 @@ fun SettingsScreen(
         onGoogleSignIn: () -> Unit,
         onGoogleSignOut: () -> Unit,
         onRequestNotifPermission: () -> Unit,
-        onRequestNotifAccess: () -> Unit
+        onRequestNotifAccess: () -> Unit,
+        briefingHour: Int,
+        briefingMinute: Int,
+        onBriefingTimeChange: (Int, Int) -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
+
         Text(
                 "⚙️ Paramètres",
                 fontSize = 28.sp,
@@ -1187,11 +1258,32 @@ fun SettingsScreen(
                             checked = isBriefingEnabled,
                             onCheckedChange = {
                                 onBriefingToggle(it)
-                                if (it) onRequestNotifPermission()
+                                if (it) {
+                                    onRequestNotifPermission()
+                                    toggleBriefingWorker(true, briefingHour, briefingMinute)
+                                } else {
+                                    toggleBriefingWorker(false)
+                                }
+
                             }
                     )
                 }
+                if (isBriefingEnabled) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = {
+                            val timePicker = android.app.TimePickerDialog(context, { _, h, m ->
+                                onBriefingTimeChange(h, m)
+                            }, briefingHour, briefingMinute, true)
+                            timePicker.show()
+                        }
+                    ) {
+                        Text("Heure du briefing : ${String.format("%02d:%02d", briefingHour, briefingMinute)}", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
+
                 Button(
                         onClick = onRequestNotifAccess,
                         modifier = Modifier.fillMaxWidth(),
