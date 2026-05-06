@@ -339,7 +339,9 @@ class MainActivity : ComponentActivity() {
                                     toggleBriefingWorker(true, h, m)
                                 }
                             },
-                            onImpromptuBriefing = { triggerImpromptuBriefing() }
+                            onImpromptuBriefing = { triggerImpromptuBriefing() },
+                            isMemoryExplorerOpen = isMemoryExplorerOpen,
+                            onMemoryExplorerToggle = { isMemoryExplorerOpen = it }
                     )
 
                 }
@@ -515,8 +517,8 @@ class MainActivity : ComponentActivity() {
                     Log.e("CortexAuth", "Erreur refresh token: ${e.message}")
                     null
                 }
-        }
     }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -541,8 +543,11 @@ fun MainScreen(
         briefingHour: Int,
         briefingMinute: Int,
         onBriefingTimeChange: (Int, Int) -> Unit,
-        onImpromptuBriefing: () -> Unit
+        onImpromptuBriefing: () -> Unit,
+        isMemoryExplorerOpen: Boolean,
+        onMemoryExplorerToggle: (Boolean) -> Unit
 ) {
+    val scope = rememberCoroutineScope()
 
     var selectedTab by remember { mutableStateOf(0) }
 
@@ -653,9 +658,9 @@ fun MainScreen(
             // Écran d'exploration de mémoire (Overlay)
             if (isMemoryExplorerOpen) {
                 MemoryExplorerScreen(
-                    onDismiss = { isMemoryExplorerOpen = false },
+                    onDismiss = { onMemoryExplorerToggle(false) },
                     onDeleteFact = { fact ->
-                        lifecycleScope.launch {
+                        scope.launch {
                             try {
                                 JarvisApiClient.apiService.deleteMemory(DeleteMemoryRequest(fact))
                             } catch (e: Exception) {
@@ -1822,7 +1827,5 @@ fun MemoryExplorerScreen(
                 }
             }
         }
-    }
-}
     }
 }
