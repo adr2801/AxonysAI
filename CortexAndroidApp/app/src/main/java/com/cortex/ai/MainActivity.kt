@@ -181,6 +181,13 @@ class MainActivity : ComponentActivity() {
             var activeNotification by remember {
                 mutableStateOf<JarvisNotification?>(null)
             }
+            
+            // Heure du briefing
+            val savedHour = prefs.getInt("briefing_hour", 8)
+            val savedMinute = prefs.getInt("briefing_minute", 0)
+            var briefingHour by remember { mutableStateOf(savedHour) }
+            var briefingMinute by remember { mutableStateOf(savedMinute) }
+
 
             // Surveillance des changements d'Intent pour afficher les notifications cliquées
             LaunchedEffect(intent) {
@@ -397,12 +404,25 @@ class MainActivity : ComponentActivity() {
         startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
     }
 
-    private fun toggleBriefingWorker(enabled: Boolean) {
+    private fun toggleBriefingWorker(enabled: Boolean, hour: Int = 8, minute: Int = 0) {
         val workManager = WorkManager.getInstance(this)
         if (enabled) {
+            val calendar = java.util.Calendar.getInstance()
+            val now = calendar.timeInMillis
+            
+            calendar.set(java.util.Calendar.HOUR_OF_DAY, hour)
+            calendar.set(java.util.Calendar.MINUTE, minute)
+            calendar.set(java.util.Calendar.SECOND, 0)
+            
+            if (calendar.timeInMillis <= now) {
+                calendar.add(java.util.Calendar.DAY_OF_YEAR, 1)
+            }
+            
+            val delay = calendar.timeInMillis - now
+            
             val briefingRequest =
                     PeriodicWorkRequestBuilder<BriefingWorker>(24, TimeUnit.HOURS)
-                            .setInitialDelay(1, TimeUnit.MINUTES)
+                            .setInitialDelay(delay, TimeUnit.MILLISECONDS)
                             .addTag("morning_briefing")
                             .build()
             workManager.enqueueUniquePeriodicWork(
@@ -410,10 +430,21 @@ class MainActivity : ComponentActivity() {
                     ExistingPeriodicWorkPolicy.UPDATE,
                     briefingRequest
             )
+            Log.d("JarvisBriefing", "Briefing programmé à ${hour}h${minute} (Délai: ${delay/60000} min)")
         } else {
             workManager.cancelUniqueWork("morning_briefing")
         }
     }
+
+    private fun triggerImpromptuBriefing() {
+        val workManager = WorkManager.getInstance(this)
+        val immediateRequest = OneTimeWorkRequestBuilder<BriefingWorker>()
+            .addTag("impromptu_briefing")
+            .build()
+        workManager.enqueue(immediateRequest)
+        android.widget.Toast.makeText(this, "⚡ Jarvis prépare ton briefing impromptu...", android.widget.Toast.LENGTH_SHORT).show()
+    }
+
 
     private fun toggleAnticipationWorker(enabled: Boolean) {
         val workManager = WorkManager.getInstance(this)
@@ -485,7 +516,7 @@ fun MainScreen(
         onRefreshToken: suspend () -> String?
 ) {
     var selectedTab by remember { mutableStateOf(0) }
-    var updateUrl by remember { mutableStateOf<String?>(null) }
+
     var activeNotification by remember { mutableStateOf<JarvisNotification?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -511,33 +542,44 @@ fun MainScreen(
         }
     }
 
+    var updateUrl by remember { mutableStateOf<String?>(null) }
+    
+    // Vérification des mises à jour au démarrage
     LaunchedEffect(Unit) {
         try {
             val release = JarvisApiClient.githubService.getLatestRelease()
-            if (release.tag_name.replace("v", "") != com.cortex.ai.BuildConfig.VERSION_NAME) {
+            val latestVersion = release.tag_name.replace("v", "")
+            val currentVersion = BuildConfig.VERSION_NAME
+            
+            if (latestVersion != currentVersion) {
                 updateUrl = release.html_url
             }
-        } catch (e: Exception) {}
+        } catch (e: Exception) {
+            Log.e("JarvisUpdate", "Erreur check maj: ${e.message}")
+        }
     }
 
     if (updateUrl != null) {
         AlertDialog(
-                onDismissRequest = { updateUrl = null },
-                title = { Text("Mise à jour disponible 🎉") },
-                text = { Text("Une nouvelle version de Cortex IA est disponible sur GitHub !") },
-                confirmButton = {
-                    Button(
-                            onClick = {
-                                context.startActivity(
-                                        Intent(Intent.ACTION_VIEW, Uri.parse(updateUrl))
-                                )
-                                updateUrl = null
-                            }
-                    ) { Text("Mettre à jour") }
-                },
-                dismissButton = { TextButton(onClick = { updateUrl = null }) { Text("Plus tard") } }
+            onDismissRequest = { updateUrl = null },
+            title = { Text("Mise à jour disponible 🎉") },
+            text = { Text("Une nouvelle version de Cortex AI est disponible sur GitHub !") },
+
+            confirmButton = {
+                Button(
+                    onClick = {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(updateUrl)))
+                        updateUrl = null
+                    }
+                ) { Text("Mettre à jour") }
+            },
+            dismissButton = {
+                TextButton(onClick = { updateUrl = null }) { Text("Plus tard") }
+            }
         )
     }
+
+
 
     Scaffold(
             bottomBar = {
@@ -736,7 +778,18 @@ fun PrioritizerScreen(
                 )
                 Text("v${BuildConfig.VERSION_NAME}", fontSize = 14.sp, color = Color.Gray)
             }
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = { triggerImpromptuBriefing() },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text("⚡ Briefing Impromptu")
+            }
+
             Spacer(modifier = Modifier.height(20.dp))
+
             OutlinedTextField(
                     value = taskName,
                     onValueChange = { taskName = it },
@@ -825,7 +878,8 @@ fun JarvisScreen(
     LaunchedEffect(Unit) {
         try {
             val response = JarvisApiClient.apiService.getThreads()
-            threads = response.threads
+            threads = (response.threads + "briefing").distinct()
+
         } catch (e: Exception) {
             Log.e("JarvisThreads", "Erreur chargement threads: ${e.message}")
         }
@@ -980,6 +1034,11 @@ fun JarvisScreen(
             }
 
             // Messages du thread actif
+            LaunchedEffect(currentMessages.size) {
+                if (currentMessages.isNotEmpty()) {
+                    listState.animateScrollToItem(currentMessages.size - 1)
+                }
+            }
             LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
@@ -1171,11 +1230,37 @@ fun SettingsScreen(
                             checked = isBriefingEnabled,
                             onCheckedChange = {
                                 onBriefingToggle(it)
-                                if (it) onRequestNotifPermission()
+                                if (it) {
+                                    onRequestNotifPermission()
+                                    toggleBriefingWorker(true, briefingHour, briefingMinute)
+                                } else {
+                                    toggleBriefingWorker(false)
+                                }
+
                             }
                     )
                 }
+                if (isBriefingEnabled) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = {
+                            val timePicker = android.app.TimePickerDialog(context, { _, h, m ->
+                                prefs.edit().putInt("briefing_hour", h).putInt("briefing_minute", m).apply()
+                                briefingHour = h
+                                briefingMinute = m
+                                if (isBriefingEnabled) {
+                                    toggleBriefingWorker(true, h, m)
+                                }
+                            }, briefingHour, briefingMinute, true)
+                            timePicker.show()
+
+                        }
+                    ) {
+                        Text("Heure du briefing : ${String.format("%02d:%02d", briefingHour, briefingMinute)}", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
                 Spacer(modifier = Modifier.height(16.dp))
+
                 Button(
                         onClick = onRequestNotifAccess,
                         modifier = Modifier.fillMaxWidth(),

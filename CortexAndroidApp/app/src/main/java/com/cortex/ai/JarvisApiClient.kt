@@ -5,8 +5,9 @@ import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Path
 
-// Modèles de données
+// Modèles de données (On ne garde que ceux spécifiques à GitHub ici)
 data class ChatRequest(
     val prompt: String, 
     val google_token: String? = null, 
@@ -24,6 +25,8 @@ interface GithubApiService {
     suspend fun getLatestRelease(): GithubRelease
 }
 
+// Les autres modèles (ThreadResponse, NotificationResponse) sont dans Models.kt
+
 interface JarvisApiService {
     @POST("/chat")
     suspend fun sendMessage(@Body request: ChatRequest): ChatResponse
@@ -37,7 +40,7 @@ interface JarvisApiService {
     @GET("/notifications")
     suspend fun getNotifications(): NotificationResponse
 
-    @POST("notifications/clear")
+    @POST("/notifications/clear")
     suspend fun clearNotifications(): Any
 }
 
