@@ -18,6 +18,9 @@ data class ChatRequest(
 )
 data class ChatResponse(val response: String?, val text: String?)
 data class GithubRelease(val tag_name: String, val html_url: String)
+data class HistoryItem(val text: String, val isUser: Boolean)
+data class HistoryResponse(val history: List<HistoryItem>)
+
 
 // Interfaces Retrofit
 interface GithubApiService {
@@ -42,7 +45,15 @@ interface JarvisApiService {
 
     @POST("/notifications/clear")
     suspend fun clearNotifications(): Any
+
+    @GET("/history/{thread_id}")
+    suspend fun getHistory(
+        @Path("thread_id") threadId: String,
+        @retrofit2.http.Query("user_id") userId: String
+    ): HistoryResponse
+
 }
+
 
 // Singleton pour fournir l'API
 object JarvisApiClient {

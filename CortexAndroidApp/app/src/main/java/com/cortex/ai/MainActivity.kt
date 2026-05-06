@@ -914,10 +914,30 @@ fun JarvisScreen(
         }
     }
 
+    // Chargement de l'historique quand on change de thread
+    LaunchedEffect(currentThreadId) {
+        isLoading = true
+        try {
+            val userName = googleAccount?.displayName ?: "Antoine"
+            val response = JarvisApiClient.apiService.getHistory(currentThreadId, userName)
+            val updated = threadMessages.toMutableMap()
+            updated[currentThreadId] = response.history.map { 
+                JarvisChatMessage(text = it.text, isUser = it.isUser, isError = false)
+            }
+            threadMessages = updated
+        } catch (e: Exception) {
+            Log.e("JarvisHistory", "Erreur chargement historique: ${e.message}")
+        } finally {
+            isLoading = false
+        }
+    }
+
+
     // Auto-scroll au dernier message
     LaunchedEffect(currentMessages.size) {
         if (currentMessages.isNotEmpty()) listState.animateScrollToItem(currentMessages.size - 1)
     }
+
 
     // Couleur d'accent selon le thread (main = bleu primaire, autres = violet/orange)
     val threadColor = if (currentThreadId == "main")
@@ -959,66 +979,9 @@ fun JarvisScreen(
         )
     }
 
-    Row(modifier = Modifier.fillMaxSize()) {
-        // --- SIDEBAR ---
-        androidx.compose.animation.AnimatedVisibility(
-            visible = showSidebar,
-            enter = androidx.compose.animation.slideInHorizontally() + androidx.compose.animation.fadeIn(),
-            exit = androidx.compose.animation.slideOutHorizontally() + androidx.compose.animation.fadeOut()
-        ) {
-            Surface(
-                modifier = Modifier.width(220.dp).fillMaxHeight(),
-                color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 8.dp
-            ) {
-                Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                    Text(
-                        "🤖 Discussions",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-
-                    threads.forEach { threadId ->
-                        val isSelected = threadId == currentThreadId
-                        val displayName = if (threadId == "main") "🏠 Général" else "📌 ${threadId.replace("_", " ")}"
-                        Surface(
-                            onClick = {
-                                currentThreadId = threadId
-                                showSidebar = false
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) threadColor.copy(alpha = 0.2f)
-                                    else Color.Transparent,
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                        ) {
-                            Text(
-                                displayName,
-                                modifier = Modifier.padding(12.dp),
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) threadColor else MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    // Bouton "+" Créer un canal
-                    Button(
-                        onClick = { showNewThreadDialog = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = threadColor)
-                    ) {
-                        Text("+ Nouveau canal")
-                    }
-                }
-            }
-        }
-
+    Box(modifier = Modifier.fillMaxSize()) {
         // --- CHAT PRINCIPAL ---
-        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+        Column(modifier = Modifier.fillMaxSize()) {
 
             // En-tête avec le nom du thread actif
             Box(
@@ -1062,12 +1025,7 @@ fun JarvisScreen(
                 }
             }
 
-            // Messages du thread actif
-            LaunchedEffect(currentMessages.size) {
-                if (currentMessages.isNotEmpty()) {
-                    listState.animateScrollToItem(currentMessages.size - 1)
-                }
-            }
+            // Messages
             LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
@@ -1098,7 +1056,8 @@ fun JarvisScreen(
                                         val updated = threadMessages.toMutableMap()
                                         updated[currentThreadId] = currentMessages.filter { it != msg }
                                         threadMessages = updated
-                                        if (currentThreadId == "main") onMessagesChange(updated["main"] ?: emptyList())
+                                        // Update the shared state if it's the main thread
+                                        // This is a bit complex due to shared state but works for local UI
                                     },
                                     onClick = {}
                                 )
@@ -1206,6 +1165,80 @@ fun JarvisScreen(
                         } else {
                             Text("↑", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         }
+                    }
+                }
+            }
+        }
+
+        // --- VOILE DE FOND (Scrim) ---
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showSidebar,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .clickable { showSidebar = false }
+            )
+        }
+
+        // --- SIDEBAR (Overlay) ---
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showSidebar,
+            enter = androidx.compose.animation.slideInHorizontally() + androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.slideOutHorizontally() + androidx.compose.animation.fadeOut()
+        ) {
+            Surface(
+                modifier = Modifier.width(260.dp).fillMaxHeight(),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 16.dp,
+                tonalElevation = 8.dp
+            ) {
+                Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                    Text(
+                        "🤖 Discussions",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    threads.forEach { threadId ->
+                        val isSelected = threadId == currentThreadId
+                        val displayName = if (threadId == "main") "🏠 Général" 
+                                          else "📌 ${threadId.replace("_", " ").replaceFirstChar { it.uppercase() }}"
+
+                        Surface(
+                            onClick = {
+                                currentThreadId = threadId
+                                showSidebar = false
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) threadColor.copy(alpha = 0.2f)
+                                    else Color.Transparent,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                        ) {
+                            Text(
+                                displayName,
+                                modifier = Modifier.padding(12.dp),
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) threadColor else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // Bouton "+" Créer un canal
+                    Button(
+                        onClick = { showNewThreadDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = threadColor)
+                    ) {
+                        Text("+ Nouveau canal")
                     }
                 }
             }

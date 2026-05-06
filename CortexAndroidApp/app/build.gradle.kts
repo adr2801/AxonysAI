@@ -11,8 +11,10 @@ android {
         applicationId = "com.cortex.ai"
         minSdk = 24
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.2.2"
+        versionCode = 7
+        versionName = "1.2.4"
+
+
 
         setProperty("archivesBaseName", "CortexAI")
 
