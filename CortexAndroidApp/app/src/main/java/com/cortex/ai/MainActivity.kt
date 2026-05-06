@@ -22,8 +22,10 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -509,6 +511,7 @@ class MainActivity : ComponentActivity() {
                     null
                 }
             }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -601,57 +604,44 @@ fun MainScreen(
         )
     }
 
-
-
     Scaffold(
-            modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize()
     ) { padding ->
         Box(
-                modifier =
-                        Modifier.fillMaxSize()
-                                .background(
-                                        Brush.verticalGradient(
-                                                colors = if (isSystemInDarkTheme())
-                                                    listOf(Color(0xFF0F111A), Color(0xFF1A1D2E))
-                                                else
-                                                    listOf(Color(0xFFF9FAFB), Color(0xFFF3F4F6))
-                                        )
-                                )
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = if (isSystemInDarkTheme())
+                            listOf(Color(0xFF0F111A), Color(0xFF1A1D2E))
+                        else
+                            listOf(Color(0xFFF9FAFB), Color(0xFFF3F4F6))
+                    )
+                )
         ) {
-            Crossfade(targetState = selectedTab, animationSpec = tween(400), modifier = Modifier.padding(bottom = 88.dp)) { tab ->
-
-        Box(
-                modifier =
-                        Modifier.fillMaxSize()
-                                .padding(padding)
-                                .background(
-                                        Brush.verticalGradient(
-                                                colors = if (isSystemInDarkTheme())
-                                                    listOf(Color(0xFF0F111A), Color(0xFF1A1D2E))
-                                                else
-                                                    listOf(Color(0xFFF9FAFB), Color(0xFFF3F4F6))
-                                        )
-                                )
-        ) {
-            Crossfade(targetState = selectedTab, animationSpec = tween(400)) { tab ->
+            // Contenu Principal avec Crossfade
+            Crossfade(
+                targetState = selectedTab, 
+                animationSpec = tween(400),
+                modifier = Modifier.padding(bottom = 88.dp) // Espace pour le dock
+            ) { tab ->
                 when (tab) {
                     0 -> PrioritizerScreen(iaPrioriseur, prioritizedTasks, onTasksChange, onImpromptuBriefing)
                     1 -> JarvisScreen(JarvisChatMessages, googleAccount, lat, lng, onMessagesChange, onRefreshToken)
-                    2 ->
-                            SettingsScreen(
-                                    themeMode,
-                                    isBriefingEnabled,
-                                    googleAccount,
-                                    onThemeChange,
-                                    onBriefingToggle,
-                                    onGoogleSignIn,
-                                    onGoogleSignOut,
-                                    onRequestNotifPermission,
-                                    onRequestNotifAccess,
-                                    briefingHour,
-                                    briefingMinute,
-                                    onBriefingTimeChange
-                            )
+                    2 -> SettingsScreen(
+                        themeMode,
+                        isBriefingEnabled,
+                        googleAccount,
+                        onThemeChange,
+                        onBriefingToggle,
+                        onGoogleSignIn,
+                        onGoogleSignOut,
+                        onRequestNotifPermission,
+                        onRequestNotifAccess,
+                        briefingHour,
+                        briefingMinute,
+                        onBriefingTimeChange
+                    )
                 }
             }
 
@@ -736,6 +726,7 @@ fun MainScreen(
         }
     }
 }
+
 
 
 @Composable
@@ -1177,18 +1168,32 @@ fun JarvisScreen(
                     val textColor = if (msg.isUser) Color.White else MaterialTheme.colorScheme.onSurface
 
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = align) {
-                        Surface(
-                            brush = bubbleBrush,
-                            shape = RoundedCornerShape(
-                                topStart = 24.dp, topEnd = 24.dp,
-                                bottomStart = if (msg.isUser) 24.dp else 4.dp,
-                                bottomEnd = if (msg.isUser) 4.dp else 24.dp
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(0.5.dp, if(msg.isUser) Color.White.copy(alpha = 0.2f) else Color.Gray.copy(alpha = 0.1f)),
-                            tonalElevation = 2.dp,
-                            shadowElevation = 4.dp,
-                            modifier = Modifier.widthIn(max = 310.dp)
+                        Box(
+                            modifier = Modifier
+                                .widthIn(max = 310.dp)
                                 .padding(vertical = 2.dp)
+                                .shadow(elevation = 4.dp, shape = RoundedCornerShape(
+                                    topStart = 24.dp, topEnd = 24.dp,
+                                    bottomStart = if (msg.isUser) 24.dp else 4.dp,
+                                    bottomEnd = if (msg.isUser) 4.dp else 24.dp
+                                ))
+                                .background(
+                                    brush = bubbleBrush,
+                                    shape = RoundedCornerShape(
+                                        topStart = 24.dp, topEnd = 24.dp,
+                                        bottomStart = if (msg.isUser) 24.dp else 4.dp,
+                                        bottomEnd = if (msg.isUser) 4.dp else 24.dp
+                                    )
+                                )
+                                .border(
+                                    width = 0.5.dp,
+                                    brush = Brush.linearGradient(listOf(Color.White.copy(alpha = 0.2f), Color.Gray.copy(alpha = 0.1f))),
+                                    shape = RoundedCornerShape(
+                                        topStart = 24.dp, topEnd = 24.dp,
+                                        bottomStart = if (msg.isUser) 24.dp else 4.dp,
+                                        bottomEnd = if (msg.isUser) 4.dp else 24.dp
+                                    )
+                                )
                                 .combinedClickable(
                                     onLongClick = {
                                         val updated = threadMessages.toMutableMap()
@@ -1209,6 +1214,7 @@ fun JarvisScreen(
                         }
                     }
                 }
+
 
                 if (isLoading) {
                     item {
