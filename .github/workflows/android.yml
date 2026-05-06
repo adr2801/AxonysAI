@@ -12,7 +12,7 @@ jobs:
     # On donne la permission au script de créer une Release sur GitHub
     permissions:
       contents: write
-
+      
     steps:
     - uses: actions/checkout@v4
 
