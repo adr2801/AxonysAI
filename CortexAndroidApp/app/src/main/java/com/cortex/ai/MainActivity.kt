@@ -453,7 +453,7 @@ class MainActivity : ComponentActivity() {
                             .build()
             workManager.enqueueUniquePeriodicWork(
                     "morning_briefing",
-                    ExistingPeriodicWorkPolicy.UPDATE,
+                    ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE,
                     briefingRequest
             )
             Log.d("JarvisBriefing", "Briefing programmé à ${hour}h${minute} (Délai: ${delay/60000} min)")
@@ -1485,7 +1485,7 @@ fun SettingsScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Morning Briefing", fontWeight = FontWeight.Medium)
                         Text(
-                                "Jarvis résume ta journée à 8h00",
+                                "Jarvis résume ta journée à ${String.format(\"%02d:%02d\", briefingHour, briefingMinute)}",
                                 fontSize = 12.sp,
                                 color = Color.Gray
                         )
