@@ -47,7 +47,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableIntStateOf
 
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -1733,7 +1732,7 @@ fun MemoryExplorerScreen(
     var memories by remember { mutableStateOf<List<MemoryFact>>(emptyList()) }
     var preferences by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var isLoading by remember { mutableStateOf(true) }
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Faits, 1: Préférences
+    var selectedTab by remember { mutableStateOf(0) } // 0: Faits, 1: Préférences
 
     LaunchedEffect(Unit) {
         try {
