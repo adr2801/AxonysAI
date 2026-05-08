@@ -16,10 +16,20 @@ data class ChatRequest(
     val lng: Double? = null,
     val thread_id: String? = "main"
 )
+data class ChatResponse(val response: String?, val text: String?)
+data class GithubRelease(val tag_name: String, val html_url: String)
+data class HistoryItem(val text: String, val isUser: Boolean)
+data class HistoryResponse(val history: List<HistoryItem>)
+data class MemoryFact(val fact: String, val timestamp: String)
+data class MemoryResponse(val facts: List<MemoryFact>)
+data class DeleteMemoryRequest(val fact: String, val user_id: String = "antoine")
+data class PreferencesResponse(val preferences: Map<String, String>)
+data class SetPreferenceRequest(val preference_key: String, val preference_value: String)
 data class AnticipateResponse(
     val status: String,
     val notifications: List<JarvisNotification>? = null
 )
+
 
 // Interfaces Retrofit
 interface GithubApiService {
