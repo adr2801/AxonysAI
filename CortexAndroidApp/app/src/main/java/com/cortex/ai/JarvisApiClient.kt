@@ -16,14 +16,10 @@ data class ChatRequest(
     val lng: Double? = null,
     val thread_id: String? = "main"
 )
-data class ChatResponse(val response: String?, val text: String?)
-data class GithubRelease(val tag_name: String, val html_url: String)
-data class HistoryItem(val text: String, val isUser: Boolean)
-data class HistoryResponse(val history: List<HistoryItem>)
-data class MemoryFact(val fact: String, val timestamp: String)
-data class MemoryResponse(val facts: List<MemoryFact>)
-data class DeleteMemoryRequest(val fact: String, val user_id: String = "antoine")
-
+data class AnticipateResponse(
+    val status: String,
+    val notifications: List<JarvisNotification>? = null
+)
 
 // Interfaces Retrofit
 interface GithubApiService {
@@ -38,7 +34,8 @@ interface JarvisApiService {
     suspend fun sendMessage(@Body request: ChatRequest): ChatResponse
 
     @POST("/anticipate")
-    suspend fun anticipate(@Body request: ChatRequest): ChatResponse
+    suspend fun anticipate(@Body request: ChatRequest): AnticipateResponse
+
 
     @GET("/threads")
     suspend fun getThreads(): ThreadResponse
@@ -60,6 +57,15 @@ interface JarvisApiService {
 
     @POST("/memory/delete")
     suspend fun deleteMemory(@Body request: DeleteMemoryRequest): Any
+
+    @GET("/preferences/{user_id}")
+    suspend fun getPreferences(@Path("user_id") userId: String): PreferencesResponse
+
+    @POST("/preferences/{user_id}")
+    suspend fun setPreference(
+        @Path("user_id") userId: String,
+        @Body request: SetPreferenceRequest
+    ): Any
 }
 
 

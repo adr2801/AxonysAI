@@ -1727,12 +1727,16 @@ fun MemoryExplorerScreen(
     onDeleteFact: (String) -> Unit
 ) {
     var memories by remember { mutableStateOf<List<MemoryFact>>(emptyList()) }
+    var preferences by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var isLoading by remember { mutableStateOf(true) }
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Faits, 1: Préférences
 
     LaunchedEffect(Unit) {
         try {
-            val response = JarvisApiClient.apiService.getMemory("antoine")
-            memories = response.facts
+            val responseFacts = JarvisApiClient.apiService.getMemory("antoine")
+            memories = responseFacts.facts
+            val responsePrefs = JarvisApiClient.apiService.getPreferences("antoine")
+            preferences = responsePrefs.preferences
         } catch (e: Exception) {
             Log.e("MemoryExplorer", "Error: ${e.message}")
         } finally {
@@ -1786,39 +1790,53 @@ fun MemoryExplorerScreen(
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
-                } else if (memories.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Jarvis n'a pas encore mémorisé de faits spécifiques.", textAlign = TextAlign.Center, color = Color.Gray)
-                    }
                 } else {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(memories) { item ->
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                border = androidx.compose.foundation.BorderStroke(0.5.dp, Color.Gray.copy(alpha = 0.1f))
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(item.fact, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                                        Text(
-                                            item.timestamp.split(" ")[0], 
-                                            fontSize = 11.sp, 
-                                            color = Color.Gray
-                                        )
+                    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        TextButton(onClick = { selectedTab = 0 }) {
+                            Text("Faits", color = if (selectedTab == 0) MaterialTheme.colorScheme.primary else Color.Gray, fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal)
+                        }
+                        TextButton(onClick = { selectedTab = 1 }) {
+                            Text("Préférences", color = if (selectedTab == 1) MaterialTheme.colorScheme.primary else Color.Gray, fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal)
+                        }
+                    }
+
+                    if (selectedTab == 0) {
+                        if (memories.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("Jarvis n'a pas encore mémorisé de faits.", textAlign = TextAlign.Center, color = Color.Gray)
+                            }
+                        } else {
+                            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                items(memories) { item ->
+                                    Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), border = androidx.compose.foundation.BorderStroke(0.5.dp, Color.Gray.copy(alpha = 0.1f))) {
+                                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(item.fact, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                                                Text(item.timestamp.split(" ")[0], fontSize = 11.sp, color = Color.Gray)
+                                            }
+                                            IconButton(onClick = { onDeleteFact(item.fact); memories = memories.filter { it.fact != item.fact } }, modifier = Modifier.size(32.dp).background(Color.Red.copy(alpha = 0.1f), CircleShape)) {
+                                                Text("🗑️", fontSize = 14.sp)
+                                            }
+                                        }
                                     }
-                                    IconButton(
-                                        onClick = { 
-                                            onDeleteFact(item.fact)
-                                            memories = memories.filter { it.fact != item.fact }
-                                        },
-                                        modifier = Modifier.size(32.dp).background(Color.Red.copy(alpha = 0.1f), CircleShape)
-                                    ) {
-                                        Text("🗑️", fontSize = 14.sp)
+                                }
+                            }
+                        }
+                    } else {
+                        if (preferences.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("Aucune préférence définie.", textAlign = TextAlign.Center, color = Color.Gray)
+                            }
+                        } else {
+                            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                items(preferences.toList()) { (key, value) ->
+                                    Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), border = androidx.compose.foundation.BorderStroke(0.5.dp, Color.Gray.copy(alpha = 0.1f))) {
+                                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(key, fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
+                                                Text(value, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
                                     }
                                 }
                             }
