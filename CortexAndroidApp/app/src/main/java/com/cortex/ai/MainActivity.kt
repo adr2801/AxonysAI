@@ -1485,7 +1485,7 @@ fun SettingsScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Morning Briefing", fontWeight = FontWeight.Medium)
                         Text(
-                                "Jarvis résume ta journée à ${String.format(\"%02d:%02d\", briefingHour, briefingMinute)}",
+                                "Jarvis résume ta journée à ${briefingHour.toString().padStart(2, '0')}:${briefingMinute.toString().padStart(2, '0')}",
                                 fontSize = 12.sp,
                                 color = Color.Gray
                         )
