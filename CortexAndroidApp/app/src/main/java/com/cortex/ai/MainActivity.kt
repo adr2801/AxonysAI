@@ -42,6 +42,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
@@ -1206,18 +1208,18 @@ fun JarvisScreen(
     )
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-        // Arrière-plan avec dégradé animé
+        // Arrière-plan avec dégradé animé (Plus visible)
         Canvas(modifier = Modifier.fillMaxSize()) {
             drawRect(
                 brush = Brush.radialGradient(
-                    colors = listOf(threadColor.copy(alpha = 0.08f), Color.Transparent),
+                    colors = listOf(threadColor.copy(alpha = 0.15f), Color.Transparent),
                     center = androidx.compose.ui.geometry.Offset(backgroundOffset % size.width, (backgroundOffset * 0.7f) % size.height),
                     radius = size.width * 1.5f
                 )
             )
             drawRect(
                 brush = Brush.radialGradient(
-                    colors = listOf(threadColor.copy(alpha = 0.05f), Color.Transparent),
+                    colors = listOf(threadColor.copy(alpha = 0.12f), Color.Transparent),
                     center = androidx.compose.ui.geometry.Offset(size.width - (backgroundOffset % size.width), size.height - ((backgroundOffset * 0.5f) % size.height)),
                     radius = size.width * 1.2f
                 )
@@ -1289,8 +1291,8 @@ fun JarvisScreen(
                     val bubbleBrush = if (msg.isUser) {
                         Brush.linearGradient(listOf(threadColor, threadColor.copy(alpha = 0.85f)))
                     } else {
-                        // Effet Glassmorphism pour Jarvis
-                        Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.12f), Color.White.copy(alpha = 0.05f)))
+                        // Effet Glassmorphism pour Jarvis (Plus marqué)
+                        Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.18f), Color.White.copy(alpha = 0.08f)))
                     }
                     
                     val textColor = if (msg.isUser) Color.White else MaterialTheme.colorScheme.onSurface
