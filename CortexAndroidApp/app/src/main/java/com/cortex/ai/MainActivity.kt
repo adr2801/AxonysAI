@@ -1955,13 +1955,8 @@ fun MemoryExplorerScreen(
                 }
             }
         }
-                    }
-                }
-            }
-        }
     }
 }
-
 
 @Composable
 fun JarvisOrb(
@@ -2067,8 +2062,10 @@ fun JarvisOrb(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun JarvisModeSelector(
+
     selectedMode: String?,
     onModeSelected: (String?) -> Unit,
     modes: List<Map<String, String>>,
