@@ -97,14 +97,28 @@ class MainActivity : ComponentActivity() {
     private fun requestLocation() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
-                location?.let {
-                    updateLocation?.invoke(it.latitude, it.longitude)
+                if (location != null) {
+                    updateLocation?.invoke(location.latitude, location.longitude)
+                } else {
+                    // Si lastLocation est nul, on demande une mise à jour ponctuelle
+                    val locationRequest = com.google.android.gms.location.LocationRequest.create().apply {
+                        priority = com.google.android.gms.location.LocationRequest.PRIORITY_HIGH_ACCURACY
+                        numUpdates = 1
+                    }
+                    fusedLocationClient.requestLocationUpdates(locationRequest, object : com.google.android.gms.location.LocationCallback() {
+                        override fun onLocationResult(result: com.google.android.gms.location.LocationResult) {
+                            result.lastLocation?.let {
+                                updateLocation?.invoke(it.latitude, it.longitude)
+                            }
+                        }
+                    }, android.os.Looper.getMainLooper())
                 }
             }
         } else {
             requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         }
     }
+
 
     private val googleSignInLauncher =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -146,12 +160,20 @@ class MainActivity : ComponentActivity() {
         // Activation de l'anticipation proactive
         toggleAnticipationWorker(true)
 
-        // Demande de permission notification pour Android 13+
+        // Demande de permission notification et audio pour Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            val permissions = arrayOf(
+                Manifest.permission.POST_NOTIFICATIONS,
+                Manifest.permission.RECORD_AUDIO
+            )
+            val needed = permissions.filter { 
+                ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED 
+            }
+            if (needed.isNotEmpty()) {
+                requestPermissionLauncher.launch(needed[0]) // On en lance une, le reste suivra ou on fera une requête groupée
             }
         }
+
         
         val iaPrioriseur = MlpPrioriseur()
 
@@ -229,6 +251,20 @@ class MainActivity : ComponentActivity() {
                 currentLatitude = lat
                 currentLongitude = lng
             }
+            
+            var isAutoReadEnabled by remember { mutableStateOf(prefs.getBoolean("auto_read_enabled", false)) }
+            val voiceAssistant = remember { 
+                VoiceAssistant(context) { recognizedText ->
+                    input = recognizedText
+                }
+            }
+            
+            DisposableEffect(Unit) {
+                onDispose {
+                    voiceAssistant.destroy()
+                }
+            }
+
 
             // Polling des notifications proactives
             LaunchedEffect(googleAccount) {
@@ -358,8 +394,15 @@ class MainActivity : ComponentActivity() {
                             },
                             onImpromptuBriefing = { triggerImpromptuBriefing() },
                             isMemoryExplorerOpen = isMemoryExplorerOpen,
-                            onMemoryExplorerToggle = { isMemoryExplorerOpen = it }
+                            onMemoryExplorerToggle = { isMemoryExplorerOpen = it },
+                            isAutoReadEnabled = isAutoReadEnabled,
+                            onAutoReadToggle = { 
+                                isAutoReadEnabled = it
+                                prefs.edit().putBoolean("auto_read_enabled", it).apply()
+                            },
+                            voiceAssistant = voiceAssistant
                     )
+
 
                 }
             }
@@ -563,8 +606,12 @@ fun MainScreen(
         onBriefingTimeChange: (Int, Int) -> Unit,
         onImpromptuBriefing: () -> Unit,
         isMemoryExplorerOpen: Boolean,
-        onMemoryExplorerToggle: (Boolean) -> Unit
+        onMemoryExplorerToggle: (Boolean) -> Unit,
+        isAutoReadEnabled: Boolean,
+        onAutoReadToggle: (Boolean) -> Unit,
+        voiceAssistant: VoiceAssistant?
 ) {
+
     val scope = rememberCoroutineScope()
 
     var selectedTab by remember { mutableStateOf(0) }
@@ -1366,6 +1413,21 @@ fun JarvisScreen(
                     IconButton(onClick = { imagePickerLauncher.launch("image/*") }) {
                         Text(if (selectedImageBase64 != null) "🖼️✅" else "🖼️", fontSize = 20.sp)
                     }
+
+                    IconButton(onClick = { 
+                        voiceAssistant?.startListening()
+                    }) {
+                        Text("🎙️", fontSize = 20.sp)
+                    }
+                    
+                    IconButton(onClick = { 
+                        val next = !isAutoReadEnabled
+                        onAutoReadToggle(next)
+                    }) {
+                        Text(if (isAutoReadEnabled) "🔊" else "🔈", fontSize = 20.sp)
+                    }
+
+
                     
                     OutlinedTextField(
 
@@ -1421,7 +1483,14 @@ fun JarvisScreen(
                                                                .trim()
                                         
                                         val jarvisMsg = JarvisChatMessage(text = cleanText, isUser = false, isError = false)
+                                        
+                                        // Lecture vocale automatique si activée
+                                        if (isAutoReadEnabled) {
+                                            voiceAssistant?.speak(cleanText)
+                                        }
+                                        
                                         val withResponse = updatedWithUser + jarvisMsg
+
                                         val updatedFinal = threadMessages.toMutableMap()
                                         updatedFinal[currentThreadId] = withResponse
                                         threadMessages = updatedFinal
