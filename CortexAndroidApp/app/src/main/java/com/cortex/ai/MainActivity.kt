@@ -117,7 +117,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
         } else {
-            requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+            requestPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
         }
     }
 
@@ -471,7 +471,7 @@ class MainActivity : ComponentActivity() {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
                             PackageManager.PERMISSION_GRANTED
             ) {
-                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                requestPermissionLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
             }
         }
     }
@@ -2088,7 +2088,7 @@ fun JarvisOrb(
             Canvas(modifier = Modifier.size(80.dp).graphicsLayer(rotationZ = -rotation * 0.5f)) {
                 drawCircle(
                     color = orbColor.copy(alpha = 0.2f),
-                    style = Stroke(width = 1.dp, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f)))
+                    style = Stroke(width = 1.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f)))
                 )
             }
 
@@ -2099,14 +2099,14 @@ fun JarvisOrb(
                     startAngle = 0f,
                     sweepAngle = 90f,
                     useCenter = false,
-                    style = Stroke(width = 2.dp, cap = StrokeCap.Round)
+                    style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
                 )
                 drawArc(
                     color = orbColor.copy(alpha = 0.5f),
                     startAngle = 180f,
                     sweepAngle = 90f,
                     useCenter = false,
-                    style = Stroke(width = 2.dp, cap = StrokeCap.Round)
+                    style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
                 )
             }
 
