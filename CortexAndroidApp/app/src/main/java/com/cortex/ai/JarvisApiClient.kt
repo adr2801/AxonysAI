@@ -14,8 +14,11 @@ data class ChatRequest(
     val user_name: String? = "Antoine",
     val lat: Double? = null,
     val lng: Double? = null,
-    val thread_id: String? = "main"
+    val thread_id: String? = "main",
+    val mode: String? = null,
+    val image_base64: String? = null
 )
+
 data class ChatResponse(val response: String?, val text: String?)
 data class GithubRelease(val tag_name: String, val html_url: String)
 data class HistoryItem(val text: String, val isUser: Boolean)
@@ -25,10 +28,13 @@ data class MemoryResponse(val facts: List<MemoryFact>)
 data class DeleteMemoryRequest(val fact: String, val user_id: String = "antoine")
 data class PreferencesResponse(val preferences: Map<String, String>)
 data class SetPreferenceRequest(val preference_key: String, val preference_value: String)
+data class JarvisMode(val id: Int, val name: String, val instruction: String, val icon: String?, val color: String?)
+data class ModeResponse(val modes: List<JarvisMode>)
 data class AnticipateResponse(
     val status: String,
     val notifications: List<JarvisNotification>? = null
 )
+
 
 
 // Interfaces Retrofit
@@ -45,6 +51,17 @@ interface JarvisApiService {
 
     @POST("/anticipate")
     suspend fun anticipate(@Body request: ChatRequest): AnticipateResponse
+
+    @GET("/modes/{user_id}")
+    suspend fun getModes(@Path("user_id") userId: String): ModeResponse
+
+    @POST("/modes/{user_id}")
+    suspend fun createMode(@Path("user_id") userId: String, @Body mode: JarvisMode): ChatResponse
+
+    @POST("/modes/{user_id}/delete")
+    suspend fun deleteMode(@Path("user_id") userId: String, @Body body: Map<String, String>): ChatResponse
+
+
 
 
     @GET("/threads")

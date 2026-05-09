@@ -52,12 +52,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+
 import androidx.work.*
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
@@ -182,11 +187,15 @@ class MainActivity : ComponentActivity() {
         val lastAccount = GoogleSignIn.getLastSignedInAccount(this)
 
         setContent {
+            val context = androidx.compose.ui.platform.LocalContext.current
             var themeMode by remember { mutableStateOf(ThemeMode.valueOf(savedTheme)) }
             var isBriefingEnabled by remember { mutableStateOf(briefingEnabled) }
             var JarvisChatMessages by remember { mutableStateOf(initialMessages) }
             var prioritizedTasks by remember { mutableStateOf(initialTasks) }
             var googleAccount by remember { mutableStateOf(lastAccount) }
+            val currentUserId = remember(googleAccount) {
+                googleAccount?.displayName?.lowercase()?.replace(" ", "_") ?: "antoine"
+            }
             var activeNotification by remember {
                 mutableStateOf<JarvisNotification?>(null)
             }
@@ -223,7 +232,7 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(googleAccount) {
                 while (true) {
                     try {
-                        val notifResponse = JarvisApiClient.apiService.getNotifications()
+                        val notifResponse = JarvisApiClient.apiService.getNotifications(currentUserId)
                         val notifs = notifResponse.notifications
                         if (notifs.isNotEmpty()) {
                             notifs.forEach { notif ->
@@ -232,7 +241,7 @@ class MainActivity : ComponentActivity() {
                                 val chatNotif = JarvisChatMessage(text = "🔔 **${notif.title}**\n${notif.message}", isUser = false, isError = false)
                                 JarvisChatMessages = JarvisChatMessages + chatNotif
                             }
-                            JarvisApiClient.apiService.clearNotifications()
+                            JarvisApiClient.apiService.clearNotifications(currentUserId)
                         }
                     } catch (e: Exception) {
                         Log.e("JarvisPolling", "Erreur polling: ${e.message}")
@@ -301,6 +310,7 @@ class MainActivity : ComponentActivity() {
                             JarvisChatMessages = JarvisChatMessages,
                             prioritizedTasks = prioritizedTasks,
                             googleAccount = googleAccount,
+                            currentUserId = currentUserId,
                             lat = currentLatitude,
                             lng = currentLongitude,
                             onThemeChange = {
@@ -532,6 +542,7 @@ fun MainScreen(
         JarvisChatMessages: List<JarvisChatMessage>,
         prioritizedTasks: List<TaskItem>,
         googleAccount: GoogleSignInAccount?,
+        currentUserId: String,
         lat: Double?,
         lng: Double?,
         onThemeChange: (ThemeMode) -> Unit,
@@ -562,14 +573,14 @@ fun MainScreen(
         if (googleAccount != null) {
             while (true) {
                 try {
-                    val response = JarvisApiClient.apiService.getNotifications()
+                    val response = JarvisApiClient.apiService.getNotifications(currentUserId)
                     if (response.notifications.isNotEmpty()) {
                         response.notifications.forEach { notif ->
                             showNativeNotification(context, notif.title, notif.message)
                             // On pourrait aussi les afficher dans la liste de chat si besoin
                         }
                         // Une fois reçues, on demande au serveur de les effacer
-                        JarvisApiClient.apiService.clearNotifications()
+                        JarvisApiClient.apiService.clearNotifications(currentUserId)
                     }
                 } catch (e: Exception) {
                     Log.e("CortexNotif", "Erreur polling: ${e.message}")
@@ -639,7 +650,7 @@ fun MainScreen(
             ) { tab ->
                 when (tab) {
                     0 -> PrioritizerScreen(iaPrioriseur, prioritizedTasks, onTasksChange, onImpromptuBriefing)
-                    1 -> JarvisScreen(JarvisChatMessages, googleAccount, lat, lng, onMessagesChange, onRefreshToken)
+                    1 -> JarvisScreen(JarvisChatMessages, googleAccount, currentUserId, lat, lng, onMessagesChange, onRefreshToken)
                     2 -> SettingsScreen(
                         themeMode,
                         isBriefingEnabled,
@@ -661,11 +672,12 @@ fun MainScreen(
             // Écran d'exploration de mémoire (Overlay)
             if (isMemoryExplorerOpen) {
                 MemoryExplorerScreen(
+                    currentUserId = currentUserId,
                     onDismiss = { onMemoryExplorerToggle(false) },
                     onDeleteFact = { fact ->
                         scope.launch {
                             try {
-                                JarvisApiClient.apiService.deleteMemory(DeleteMemoryRequest(fact))
+                                JarvisApiClient.apiService.deleteMemoryFact(DeleteMemoryRequest(fact, currentUserId))
                             } catch (e: Exception) {
                                 Log.e("MemoryDelete", "Error: ${e.message}")
                             }
@@ -1005,6 +1017,7 @@ fun SliderRow(label: String, value: Float, onValueChange: (Float) -> Unit) {
 fun JarvisScreen(
         messages: List<JarvisChatMessage>,
         googleAccount: GoogleSignInAccount?,
+        currentUserId: String,
         lat: Double?,
         lng: Double?,
         onMessagesChange: (List<JarvisChatMessage>) -> Unit,
@@ -1032,9 +1045,9 @@ fun JarvisScreen(
     }
 
     // Chargement des threads disponibles depuis l'API
-    LaunchedEffect(Unit) {
+    LaunchedEffect(currentUserId) {
         try {
-            val response = JarvisApiClient.apiService.getThreads()
+            val response = JarvisApiClient.apiService.getThreads(currentUserId)
             threads = (response.threads + "briefing").distinct()
 
         } catch (e: Exception) {
@@ -1047,7 +1060,7 @@ fun JarvisScreen(
         isLoading = true
         try {
             val userName = googleAccount?.displayName ?: "Antoine"
-            val response = JarvisApiClient.apiService.getHistory(currentThreadId, userName)
+            val response = JarvisApiClient.apiService.getHistory(currentThreadId, currentUserId, userName)
             val updated = threadMessages.toMutableMap()
             updated[currentThreadId] = response.history.map { 
                 JarvisChatMessage(text = it.text, isUser = it.isUser, isError = false)
@@ -1247,14 +1260,91 @@ fun JarvisScreen(
 
                 if (isLoading) {
                     item {
-                        ThinkingWave(color = threadColor)
+                        JarvisOrb(
+                            isThinking = true,
+                            isToolRunning = false, // On pourra brancher ça sur un état réel plus tard
+                            baseColor = threadColor
+                        )
                     }
                 }
+
                 item { Spacer(modifier = Modifier.height(8.dp)) }
             }
 
+            // Sélecteur de modes
+            var availableModes by remember { mutableStateOf<List<Map<String, String>>>(emptyList()) }
+            var currentMode by remember { mutableStateOf<String?>(null) }
+            var showCreateModeDialog by remember { mutableStateOf(false) }
+            
+            fun refreshModes() {
+                coroutineScope.launch {
+                    try {
+                        val response = JarvisApiClient.apiService.getModes(currentUserId)
+                        availableModes = response.modes.map { mapOf(
+                            "name" to it.name,
+                            "icon" to (it.icon ?: "💎"),
+                            "color" to (it.color ?: "#4285F4")
+                        ) }
+                    } catch (e: Exception) {
+                        Log.e("JarvisModes", "Erreur chargement modes: ${e.message}")
+                    }
+                }
+
+            }
+
+            LaunchedEffect(currentUserId) {
+                refreshModes()
+            }
+
+            if (showCreateModeDialog) {
+                CreateModeDialog(
+                    onDismiss = { showCreateModeDialog = false },
+                    onCreate = { n, i, ic, c ->
+                        coroutineScope.launch {
+                            try {
+                                JarvisApiClient.apiService.createMode(currentUserId, JarvisMode(0, n, i, ic, c))
+                                showCreateModeDialog = false
+                                refreshModes()
+                            } catch (e: Exception) {
+                                Log.e("JarvisModes", "Erreur création mode: ${e.message}")
+                            }
+                        }
+                    }
+
+                )
+            }
+
+            JarvisModeSelector(
+                selectedMode = currentMode,
+                onModeSelected = { currentMode = it },
+                modes = availableModes,
+                onAddMode = { showCreateModeDialog = true }
+            )
+
+
+            var selectedImageBase64 by remember { mutableStateOf<String?>(null) }
+            val imagePickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                ActivityResultContracts.GetContent()
+            ) { uri: Uri? ->
+                uri?.let {
+                    coroutineScope.launch {
+                        try {
+                            val inputStream = context.contentResolver.openInputStream(it)
+                            val bytes = inputStream?.readBytes()
+                            if (bytes != null) {
+                                selectedImageBase64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                            }
+                        } catch (e: Exception) {
+                            Log.e("JarvisImage", "Erreur lecture image: ${e.message}")
+                        }
+                    }
+                }
+            }
+
             // Barre de saisie "Flottante"
+
             Surface(
+
                 modifier = Modifier
                     .padding(16.dp)
                     .navigationBarsPadding()
@@ -1268,7 +1358,12 @@ fun JarvisScreen(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    IconButton(onClick = { imagePickerLauncher.launch("image/*") }) {
+                        Text(if (selectedImageBase64 != null) "🖼️✅" else "🖼️", fontSize = 20.sp)
+                    }
+                    
                     OutlinedTextField(
+
                         value = input,
                         onValueChange = { input = it },
                         modifier = Modifier.weight(1f),
@@ -1309,8 +1404,11 @@ fun JarvisScreen(
                                         if (freshToken != null) token = freshToken
                                         val name = googleAccount?.displayName ?: "Antoine"
                                         val response = JarvisApiClient.apiService.sendMessage(
-                                            ChatRequest(userMsg, token, name, lat, lng, currentThreadId)
+                                            ChatRequest(userMsg, token, name, lat, lng, currentThreadId, mode = currentMode, image_base64 = selectedImageBase64)
                                         )
+                                        selectedImageBase64 = null
+
+
                                         val rawText = response.response ?: response.text ?: "Aucune réponse."
                                         // Nettoyage agressif de TOUTES les balises techniques [DATE], [HEURE], [CONTEXTE], etc.
                                         val cleanText = rawText.replace(Regex("\\[(CONTEXTE|DATE|HEURE|USER|INFO).*?\\]\\n?", RegexOption.DOT_MATCHES_ALL), "")
@@ -1726,6 +1824,7 @@ fun ThinkingWave(color: Color) {
 
 @Composable
 fun MemoryExplorerScreen(
+    currentUserId: String,
     onDismiss: () -> Unit,
     onDeleteFact: (String) -> Unit
 ) {
@@ -1734,11 +1833,11 @@ fun MemoryExplorerScreen(
     var isLoading by remember { mutableStateOf(true) }
     var selectedTab by remember { mutableStateOf(0) } // 0: Faits, 1: Préférences
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(currentUserId) {
         try {
-            val responseFacts = JarvisApiClient.apiService.getMemory("antoine")
+            val responseFacts = JarvisApiClient.apiService.getMemory(currentUserId)
             memories = responseFacts.facts
-            val responsePrefs = JarvisApiClient.apiService.getPreferences("antoine")
+            val responsePrefs = JarvisApiClient.apiService.getPreferences(currentUserId)
             preferences = responsePrefs.preferences
         } catch (e: Exception) {
             Log.e("MemoryExplorer", "Error: ${e.message}")
@@ -1746,6 +1845,7 @@ fun MemoryExplorerScreen(
             isLoading = false
         }
     }
+
 
     Box(
         modifier = Modifier
@@ -1849,6 +1949,242 @@ fun MemoryExplorerScreen(
                     }
                 }
             }
+        }
+    }
+}
+    }
+}
+
+@Composable
+fun JarvisOrb(
+    isThinking: Boolean = true,
+    isToolRunning: Boolean = false,
+    toolName: String? = null,
+    baseColor: Color = MaterialTheme.colorScheme.primary
+) {
+    val infiniteTransition = rememberInfiniteTransition()
+    
+    // Animation de pulsation de base
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.2f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
+
+    // Animation de rotation pour les outils
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(if (isToolRunning) 2000 else 8000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        )
+    )
+
+    // Couleur dynamique
+    val orbColor = when {
+        isToolRunning -> Color(0xFFFF9800) // Doré/Orange pour les outils
+        else -> baseColor
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(80.dp)) {
+            // Effet de halo (Glow)
+            Canvas(modifier = Modifier.size(60.dp * pulseScale)) {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(orbColor.copy(alpha = 0.4f), Color.Transparent),
+                        center = center,
+                        radius = size.width / 1.5f
+                    )
+                )
+            }
+
+            // L'Orbe Central (Morphing Mesh simplifié)
+            Canvas(modifier = Modifier.size(40.dp).graphicsLayer(rotationZ = rotation)) {
+                val path = android.graphics.Path()
+                val radius = size.width / 2
+                
+                // On dessine une forme un peu organique au lieu d'un cercle parfait
+                for (i in 0..360 step 45) {
+                    val angle = Math.toRadians(i.toDouble())
+                    // On fait varier le rayon selon l'angle pour l'effet de morphing
+                    val variation = if (isThinking) Math.sin(angle * 3 + (rotation / 10).toDouble()) * 5 else 0.0
+                    val r = radius + variation
+                    val x = center.x + (r * Math.cos(angle)).toFloat()
+                    val y = center.y + (r * Math.sin(angle)).toFloat()
+                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+                path.close()
+                
+                drawContext.canvas.nativeCanvas.drawPath(path, android.graphics.Paint().apply {
+                    color = orbColor.toArgb()
+                    style = android.graphics.Paint.Style.FILL
+                    isAntiAlias = true
+                    setShadowLayer(20f, 0f, 0f, orbColor.copy(alpha = 0.8f).toArgb())
+                })
+            }
+            
+            if (isToolRunning) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(56.dp),
+                    color = orbColor,
+                    strokeWidth = 2.dp
+                )
+            }
+        }
+        
+        if (isToolRunning && toolName != null) {
+            Text(
+                "Jarvis utilise : $toolName",
+                fontSize = 12.sp,
+                color = orbColor,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        } else if (isThinking) {
+            Text(
+                "Jarvis réfléchit...",
+                fontSize = 12.sp,
+                color = baseColor.copy(alpha = 0.7f),
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun JarvisModeSelector(
+    selectedMode: String?,
+    onModeSelected: (String?) -> Unit,
+    modes: List<Map<String, String>>,
+    onAddMode: () -> Unit
+) {
+    LazyRow(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        item {
+            ModeChip(
+                name = "Standard",
+                icon = "🤖",
+                isSelected = selectedMode == null,
+                onClick = { onModeSelected(null) }
+            )
+        }
+        items(modes) { mode ->
+            val name = mode["name"] ?: ""
+            ModeChip(
+                name = name,
+                icon = mode["icon"] ?: "💎",
+                color = Color(android.graphics.Color.parseColor(mode["color"] ?: "#4285F4")),
+                isSelected = selectedMode == name,
+                onClick = { onModeSelected(name) }
+            )
+        }
+        item {
+            Surface(
+                onClick = onAddMode,
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text("+", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CreateModeDialog(
+    onDismiss: () -> Unit,
+    onCreate: (String, String, String, String) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var instruction by remember { mutableStateOf("") }
+    var icon by remember { mutableStateOf("💎") }
+    var color by remember { mutableStateOf("#4285F4") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Créer une nouvelle Gem (Mode)") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Nom du mode") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = instruction,
+                    onValueChange = { instruction = it },
+                    label = { Text("Instructions système") },
+                    placeholder = { Text("Ex: Tu es un expert en cuisine...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = icon,
+                        onValueChange = { icon = it },
+                        label = { Text("Icône") },
+                        modifier = Modifier.width(80.dp)
+                    )
+                    OutlinedTextField(
+                        value = color,
+                        onValueChange = { color = it },
+                        label = { Text("Couleur (Hex)") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onCreate(name, instruction, icon, color) },
+                enabled = name.isNotBlank() && instruction.isNotBlank()
+            ) {
+                Text("Créer")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Annuler")
+            }
+        }
+    )
+}
+
+@Composable
+fun ModeChip(
+    name: String,
+    icon: String,
+    color: Color = MaterialTheme.colorScheme.primary,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.clickable { onClick() },
+        shape = RoundedCornerShape(20.dp),
+        color = if (isSelected) color.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        border = androidx.compose.foundation.BorderStroke(
+            width = if (isSelected) 1.5.dp else 0.5.dp,
+            color = if (isSelected) color else Color.Gray.copy(alpha = 0.3f)
+        )
+    ) {
+        Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(icon, modifier = Modifier.padding(end = 4.dp))
+            Text(name, fontSize = 13.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
         }
     }
 }
