@@ -6,6 +6,9 @@ import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.Query
+import retrofit2.http.Header
+
 
 // Modèles de données (On ne garde que ceux spécifiques à GitHub ici)
 data class ChatRequest(
@@ -29,7 +32,9 @@ data class DeleteMemoryRequest(val fact: String, val user_id: String = "antoine"
 data class PreferencesResponse(val preferences: Map<String, String>)
 data class SetPreferenceRequest(val preference_key: String, val preference_value: String)
 data class JarvisMode(val id: Int, val name: String, val instruction: String, val icon: String?, val color: String?)
+data class ModeRequest(val name: String, val instruction: String, val icon: String?, val color: String?)
 data class ModeResponse(val modes: List<JarvisMode>)
+
 data class AnticipateResponse(
     val status: String,
     val notifications: List<JarvisNotification>? = null
@@ -56,7 +61,7 @@ interface JarvisApiService {
     suspend fun getModes(@Path("user_id") userId: String): ModeResponse
 
     @POST("/modes/{user_id}")
-    suspend fun createMode(@Path("user_id") userId: String, @Body mode: JarvisMode): ChatResponse
+    suspend fun createMode(@Path("user_id") userId: String, @Body mode: ModeRequest): ChatResponse
 
     @POST("/modes/{user_id}/delete")
     suspend fun deleteMode(@Path("user_id") userId: String, @Body body: Map<String, String>): ChatResponse
@@ -64,26 +69,31 @@ interface JarvisApiService {
 
 
 
+
     @GET("/threads")
-    suspend fun getThreads(): ThreadResponse
+    suspend fun getThreads(@Query("user_id") userId: String): ThreadResponse
 
     @GET("/notifications")
-    suspend fun getNotifications(): NotificationResponse
+    suspend fun getNotifications(@Query("user_id") userId: String): NotificationResponse
 
     @POST("/notifications/clear")
-    suspend fun clearNotifications(): Any
+    suspend fun clearNotifications(@Query("user_id") userId: String): Any
+
+
 
     @GET("/history/{thread_id}")
     suspend fun getHistory(
         @Path("thread_id") threadId: String,
-        @retrofit2.http.Query("user_id") userId: String
+        @Query("user_id") userId: String
     ): HistoryResponse
 
-    @GET("/memory")
-    suspend fun getMemory(@retrofit2.http.Query("user_id") userId: String): MemoryResponse
+    @GET("/memory/{user_id}")
+    suspend fun getMemory(@Path("user_id") userId: String): MemoryResponse
+
 
     @POST("/memory/delete")
-    suspend fun deleteMemory(@Body request: DeleteMemoryRequest): Any
+    suspend fun deleteMemoryFact(@Body request: DeleteMemoryRequest): Any
+
 
     @GET("/preferences/{user_id}")
     suspend fun getPreferences(@Path("user_id") userId: String): PreferencesResponse

@@ -79,7 +79,9 @@ import kotlinx.coroutines.withContext
 // --- Modèles ---
 // Redondances supprimées : ThemeMode, JarvisChatMessage, TaskItem définis dans Models.kt
 
+@OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
+
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private var updateLocation: ((Double, Double) -> Unit)? = null
 
@@ -233,6 +235,7 @@ class MainActivity : ComponentActivity() {
                 while (true) {
                     try {
                         val notifResponse = JarvisApiClient.apiService.getNotifications(currentUserId)
+
                         val notifs = notifResponse.notifications
                         if (notifs.isNotEmpty()) {
                             notifs.forEach { notif ->
@@ -242,6 +245,7 @@ class MainActivity : ComponentActivity() {
                                 JarvisChatMessages = JarvisChatMessages + chatNotif
                             }
                             JarvisApiClient.apiService.clearNotifications(currentUserId)
+
                         }
                     } catch (e: Exception) {
                         Log.e("JarvisPolling", "Erreur polling: ${e.message}")
@@ -1059,8 +1063,8 @@ fun JarvisScreen(
     LaunchedEffect(currentThreadId) {
         isLoading = true
         try {
-            val userName = googleAccount?.displayName ?: "Antoine"
-            val response = JarvisApiClient.apiService.getHistory(currentThreadId, currentUserId, userName)
+            val response = JarvisApiClient.apiService.getHistory(currentThreadId, currentUserId)
+
             val updated = threadMessages.toMutableMap()
             updated[currentThreadId] = response.history.map { 
                 JarvisChatMessage(text = it.text, isUser = it.isUser, isError = false)
@@ -1302,7 +1306,8 @@ fun JarvisScreen(
                     onCreate = { n, i, ic, c ->
                         coroutineScope.launch {
                             try {
-                                JarvisApiClient.apiService.createMode(currentUserId, JarvisMode(0, n, i, ic, c))
+                                JarvisApiClient.apiService.createMode(currentUserId, ModeRequest(n, i, ic, c))
+
                                 showCreateModeDialog = false
                                 refreshModes()
                             } catch (e: Exception) {
@@ -1950,10 +1955,13 @@ fun MemoryExplorerScreen(
                 }
             }
         }
+                    }
+                }
+            }
+        }
     }
 }
-    }
-}
+
 
 @Composable
 fun JarvisOrb(
@@ -2104,8 +2112,10 @@ fun JarvisModeSelector(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateModeDialog(
+
     onDismiss: () -> Unit,
     onCreate: (String, String, String, String) -> Unit
 ) {
@@ -2121,28 +2131,28 @@ fun CreateModeDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it },
+                    onValueChange = { newName -> name = newName },
                     label = { Text("Nom du mode") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = instruction,
-                    onValueChange = { instruction = it },
+                    onValueChange = { newInstr -> instruction = newInstr },
                     label = { Text("Instructions système") },
                     placeholder = { Text("Ex: Tu es un expert en cuisine...") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3
+                    modifier = Modifier.fillMaxWidth()
                 )
+
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = icon,
-                        onValueChange = { icon = it },
+                        onValueChange = { newIcon -> icon = newIcon },
                         label = { Text("Icône") },
                         modifier = Modifier.width(80.dp)
                     )
                     OutlinedTextField(
                         value = color,
-                        onValueChange = { color = it },
+                        onValueChange = { newColor -> color = newColor },
                         label = { Text("Couleur (Hex)") },
                         modifier = Modifier.weight(1f)
                     )
