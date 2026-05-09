@@ -40,10 +40,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
@@ -1071,6 +1068,7 @@ fun JarvisScreen(
     var isLoading by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val listState = rememberLazyListState()
 
     val voiceAssistant = remember { 
@@ -1195,7 +1193,36 @@ fun JarvisScreen(
     }
 
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    // --- Animation d'arrière-plan dynamique ---
+    val infiniteTransition = rememberInfiniteTransition()
+    val backgroundOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1000f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(40000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
+
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+        // Arrière-plan avec dégradé animé
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(threadColor.copy(alpha = 0.08f), Color.Transparent),
+                    center = androidx.compose.ui.geometry.Offset(backgroundOffset % size.width, (backgroundOffset * 0.7f) % size.height),
+                    radius = size.width * 1.5f
+                )
+            )
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(threadColor.copy(alpha = 0.05f), Color.Transparent),
+                    center = androidx.compose.ui.geometry.Offset(size.width - (backgroundOffset % size.width), size.height - ((backgroundOffset * 0.5f) % size.height)),
+                    radius = size.width * 1.2f
+                )
+            )
+        }
+
         // --- CHAT PRINCIPAL ---
         Column(modifier = Modifier.fillMaxSize()) {
 
@@ -1261,7 +1288,8 @@ fun JarvisScreen(
                     val bubbleBrush = if (msg.isUser) {
                         Brush.linearGradient(listOf(threadColor, threadColor.copy(alpha = 0.85f)))
                     } else {
-                        Brush.linearGradient(listOf(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)))
+                        // Effet Glassmorphism pour Jarvis
+                        Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.12f), Color.White.copy(alpha = 0.05f)))
                     }
                     
                     val textColor = if (msg.isUser) Color.White else MaterialTheme.colorScheme.onSurface
@@ -1271,11 +1299,14 @@ fun JarvisScreen(
                             modifier = Modifier
                                 .widthIn(max = 310.dp)
                                 .padding(vertical = 2.dp)
-                                .shadow(elevation = 4.dp, shape = RoundedCornerShape(
-                                    topStart = 24.dp, topEnd = 24.dp,
-                                    bottomStart = if (msg.isUser) 24.dp else 4.dp,
-                                    bottomEnd = if (msg.isUser) 4.dp else 24.dp
-                                ))
+                                .shadow(
+                                    elevation = if (msg.isUser) 6.dp else 0.dp, 
+                                    shape = RoundedCornerShape(
+                                        topStart = 24.dp, topEnd = 24.dp,
+                                        bottomStart = if (msg.isUser) 24.dp else 4.dp,
+                                        bottomEnd = if (msg.isUser) 4.dp else 24.dp
+                                    )
+                                )
                                 .background(
                                     brush = bubbleBrush,
                                     shape = RoundedCornerShape(
@@ -1285,8 +1316,8 @@ fun JarvisScreen(
                                     )
                                 )
                                 .border(
-                                    width = 0.5.dp,
-                                    brush = Brush.linearGradient(listOf(Color.White.copy(alpha = 0.2f), Color.Gray.copy(alpha = 0.1f))),
+                                    width = if (msg.isUser) 0.dp else 1.dp,
+                                    brush = Brush.linearGradient(listOf(Color.White.copy(alpha = 0.3f), Color.White.copy(alpha = 0.1f))),
                                     shape = RoundedCornerShape(
                                         topStart = 24.dp, topEnd = 24.dp,
                                         bottomStart = if (msg.isUser) 24.dp else 4.dp,
@@ -1416,21 +1447,64 @@ fun JarvisScreen(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { imagePickerLauncher.launch("image/*") }) {
-                        Text(if (selectedImageBase64 != null) "🖼️✅" else "🖼️", fontSize = 20.sp)
+                    var showTools by remember { mutableStateOf(false) }
+                    
+                    // Bouton d'expansion des outils (+)
+                    IconButton(onClick = { showTools = !showTools }) {
+                        Icon(
+                            imageVector = if (showTools) Icons.Default.Close else Icons.Default.Add,
+                            contentDescription = "Outils",
+                            tint = if (showTools) Color.Gray else threadColor,
+                            modifier = Modifier.graphicsLayer(rotationZ = if (showTools) 90f else 0f)
+                        )
                     }
 
-                    IconButton(onClick = { 
-                        voiceAssistant?.startListening()
-                    }) {
-                        Text("🎙️", fontSize = 20.sp)
-                    }
-                    
-                    IconButton(onClick = { 
-                        val next = !isAutoReadEnabled
-                        onAutoReadToggle(next)
-                    }) {
-                        Text(if (isAutoReadEnabled) "🔊" else "🔈", fontSize = 20.sp)
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = showTools,
+                        enter = fadeIn() + expandHorizontally(),
+                        exit = fadeOut() + shrinkHorizontally()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Analyse d'image
+                            IconButton(onClick = { 
+                                showTools = false
+                                imagePickerLauncher.launch("image/*") 
+                            }) {
+                                Box {
+                                    Icon(Icons.Default.Image, contentDescription = "Image", tint = threadColor)
+                                    if (selectedImageBase64 != null) {
+                                        Surface(
+                                            modifier = Modifier.size(8.dp).align(Alignment.TopEnd),
+                                            shape = CircleShape,
+                                            color = Color(0xFF4CAF50),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)
+                                        ) {}
+                                    }
+                                }
+                            }
+
+                            // Dictée Vocale
+                            IconButton(onClick = { 
+                                showTools = false
+                                voiceAssistant.startListening() 
+                            }) {
+                                Icon(Icons.Default.Mic, contentDescription = "Vocal", tint = threadColor)
+                            }
+                            
+                            // Lecture automatique
+                            IconButton(onClick = { 
+                                val next = !isAutoReadEnabled
+                                onAutoReadToggle(next)
+                            }) {
+                                Icon(
+                                    imageVector = if (isAutoReadEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
+                                    contentDescription = "Auto-read",
+                                    tint = if (isAutoReadEnabled) threadColor else Color.Gray
+                                )
+                            }
+                            
+                            Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color.LightGray.copy(alpha = 0.5f)))
+                        }
                     }
 
 
@@ -1469,6 +1543,7 @@ fun JarvisScreen(
                                 if (currentThreadId == "main") onMessagesChange(updatedWithUser)
                                 input = ""
                                 isLoading = true
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                                 coroutineScope.launch {
                                     try {
                                         val prefs = context.getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
@@ -1487,6 +1562,8 @@ fun JarvisScreen(
                                         val cleanText = rawText.replace(Regex("\\[(CONTEXTE|DATE|HEURE|USER|INFO).*?\\]\\n?", RegexOption.DOT_MATCHES_ALL), "")
                                                                .replace(Regex("\\[.*?\\]"), "") // Sécurité supplémentaire pour toute balise [ ]
                                                                .trim()
+                                        
+                                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                         
                                         val jarvisMsg = JarvisChatMessage(text = cleanText, isUser = false, isError = false)
                                         
