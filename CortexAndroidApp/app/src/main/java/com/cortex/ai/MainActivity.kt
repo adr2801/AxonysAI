@@ -29,6 +29,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.animation.core.*
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -86,11 +87,12 @@ class MainActivity : ComponentActivity() {
     private var updateLocation: ((Double, Double) -> Unit)? = null
 
     private val requestPermissionLauncher =
-            registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-                if (isGranted) {
+            registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+                val allGranted = permissions.entries.all { it.value }
+                if (allGranted) {
                     requestLocation()
                 } else {
-                    Log.w("CortexAuth", "Permission refusée")
+                    Log.w("CortexAuth", "Certaines permissions ont été refusées")
                 }
             }
 
@@ -170,7 +172,7 @@ class MainActivity : ComponentActivity() {
                 ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED 
             }
             if (needed.isNotEmpty()) {
-                requestPermissionLauncher.launch(needed[0]) // On en lance une, le reste suivra ou on fera une requête groupée
+                requestPermissionLauncher.launch(needed.toTypedArray())
             }
         }
 
@@ -253,19 +255,7 @@ class MainActivity : ComponentActivity() {
             }
             
             var isAutoReadEnabled by remember { mutableStateOf(prefs.getBoolean("auto_read_enabled", false)) }
-            val voiceAssistant = remember { 
-                VoiceAssistant(context) { recognizedText ->
-                    input = recognizedText
-                }
-            }
             
-            DisposableEffect(Unit) {
-                onDispose {
-                    voiceAssistant.destroy()
-                }
-            }
-
-
             // Polling des notifications proactives
             LaunchedEffect(googleAccount) {
                 while (true) {
@@ -399,9 +389,9 @@ class MainActivity : ComponentActivity() {
                             onAutoReadToggle = { 
                                 isAutoReadEnabled = it
                                 prefs.edit().putBoolean("auto_read_enabled", it).apply()
-                            },
-                            voiceAssistant = voiceAssistant
+                            }
                     )
+
 
 
                 }
@@ -608,9 +598,9 @@ fun MainScreen(
         isMemoryExplorerOpen: Boolean,
         onMemoryExplorerToggle: (Boolean) -> Unit,
         isAutoReadEnabled: Boolean,
-        onAutoReadToggle: (Boolean) -> Unit,
-        voiceAssistant: VoiceAssistant?
+        onAutoReadToggle: (Boolean) -> Unit
 ) {
+
 
     val scope = rememberCoroutineScope()
 
@@ -701,7 +691,8 @@ fun MainScreen(
             ) { tab ->
                 when (tab) {
                     0 -> PrioritizerScreen(iaPrioriseur, prioritizedTasks, onTasksChange, onImpromptuBriefing)
-                    1 -> JarvisScreen(JarvisChatMessages, googleAccount, currentUserId, lat, lng, onMessagesChange, onRefreshToken)
+                    1 -> JarvisScreen(JarvisChatMessages, googleAccount, currentUserId, lat, lng, onMessagesChange, onRefreshToken, isAutoReadEnabled, onAutoReadToggle)
+
                     2 -> SettingsScreen(
                         themeMode,
                         isBriefingEnabled,
@@ -1072,13 +1063,28 @@ fun JarvisScreen(
         lat: Double?,
         lng: Double?,
         onMessagesChange: (List<JarvisChatMessage>) -> Unit,
-        onRefreshToken: suspend () -> String?
+        onRefreshToken: suspend () -> String?,
+        isAutoReadEnabled: Boolean,
+        onAutoReadToggle: (Boolean) -> Unit
 ) {
     var input by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     val listState = rememberLazyListState()
+
+    val voiceAssistant = remember { 
+        VoiceAssistant(context) { recognizedText ->
+            input = recognizedText
+        }
+    }
+    
+    DisposableEffect(Unit) {
+        onDispose {
+            voiceAssistant.destroy()
+        }
+    }
+
 
     // --- Gestion des Threads ---
     var currentThreadId by remember { mutableStateOf("main") }
@@ -2063,31 +2069,55 @@ fun JarvisOrb(
     }
 
     Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp),
+        horizontalAlignment = Alignment.Start
     ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(80.dp)) {
-            // Effet de halo (Glow)
-            Canvas(modifier = Modifier.size(60.dp * pulseScale)) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(100.dp)) {
+            // 1. Halo extérieur profond (Atmosphère)
+            Canvas(modifier = Modifier.size(90.dp * pulseScale)) {
                 drawCircle(
                     brush = Brush.radialGradient(
-                        colors = listOf(orbColor.copy(alpha = 0.4f), Color.Transparent),
+                        colors = listOf(orbColor.copy(alpha = 0.3f), Color.Transparent),
                         center = center,
-                        radius = size.width / 1.5f
+                        radius = size.width / 1.2f
                     )
                 )
             }
 
-            // L'Orbe Central (Morphing Mesh simplifié)
-            Canvas(modifier = Modifier.size(40.dp).graphicsLayer(rotationZ = rotation)) {
+            // 2. Anneau HUD rotatif (Sci-Fi)
+            Canvas(modifier = Modifier.size(80.dp).graphicsLayer(rotationZ = -rotation * 0.5f)) {
+                drawCircle(
+                    color = orbColor.copy(alpha = 0.2f),
+                    style = Stroke(width = 1.dp, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f)))
+                )
+            }
+
+            // 3. Deuxième anneau HUD (Sens inverse)
+            Canvas(modifier = Modifier.size(72.dp).graphicsLayer(rotationZ = rotation * 1.2f)) {
+                drawArc(
+                    color = orbColor.copy(alpha = 0.5f),
+                    startAngle = 0f,
+                    sweepAngle = 90f,
+                    useCenter = false,
+                    style = Stroke(width = 2.dp, cap = StrokeCap.Round)
+                )
+                drawArc(
+                    color = orbColor.copy(alpha = 0.5f),
+                    startAngle = 180f,
+                    sweepAngle = 90f,
+                    useCenter = false,
+                    style = Stroke(width = 2.dp, cap = StrokeCap.Round)
+                )
+            }
+
+            // 4. L'Orbe Central avec gradient complexe (Profondeur)
+            Canvas(modifier = Modifier.size(45.dp).graphicsLayer(rotationZ = rotation * 0.3f)) {
                 val path = android.graphics.Path()
                 val radius = size.width / 2
                 
-                // On dessine une forme un peu organique au lieu d'un cercle parfait
-                for (i in 0..360 step 45) {
+                for (i in 0..360 step 30) {
                     val angle = Math.toRadians(i.toDouble())
-                    // On fait varier le rayon selon l'angle pour l'effet de morphing
-                    val variation = if (isThinking) Math.sin(angle * 3 + (rotation / 10).toDouble()) * 5 else 0.0
+                    val variation = if (isThinking) Math.sin(angle * 4 + (rotation / 15).toDouble()) * 4 else 0.0
                     val r = radius + variation
                     val x = center.x + (r * Math.cos(angle)).toFloat()
                     val y = center.y + (r * Math.sin(angle)).toFloat()
@@ -2095,22 +2125,29 @@ fun JarvisOrb(
                 }
                 path.close()
                 
+                // Remplissage avec gradient radial interne pour la profondeur
                 drawContext.canvas.nativeCanvas.drawPath(path, android.graphics.Paint().apply {
-                    color = orbColor.toArgb()
+                    shader = android.graphics.RadialGradient(
+                        center.x, center.y, radius,
+                        intArrayOf(Color.White.copy(alpha = 0.9f).toArgb(), orbColor.toArgb(), orbColor.copy(alpha = 0.8f).toArgb()),
+                        floatArrayOf(0f, 0.6f, 1f),
+                        android.graphics.Shader.TileMode.CLAMP
+                    )
                     style = android.graphics.Paint.Style.FILL
                     isAntiAlias = true
-                    setShadowLayer(20f, 0f, 0f, orbColor.copy(alpha = 0.8f).toArgb())
+                    setShadowLayer(30f, 0f, 0f, orbColor.toArgb())
                 })
             }
             
             if (isToolRunning) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(56.dp),
-                    color = orbColor,
-                    strokeWidth = 2.dp
+                    modifier = Modifier.size(65.dp),
+                    color = Color(0xFFFF9800),
+                    strokeWidth = 3.dp
                 )
             }
         }
+
         
         if (isToolRunning && toolName != null) {
             Text(
