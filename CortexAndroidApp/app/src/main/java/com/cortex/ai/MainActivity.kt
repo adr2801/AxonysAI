@@ -392,10 +392,10 @@ class MainActivity : ComponentActivity() {
                                         // Pour l'instant on se concentre sur l'ajout des nouvelles
                                         newList.lastOrNull()?.let { task ->
                                             JarvisApiClient.apiService.addTask(currentUserId, TaskRequest(
-                                                name = task.name,
+                                                name = task.name ?: "Sans titre",
                                                 urgency = 5, importance = 5, duration = 5, envy = 5, energy = 5,
-                                                score = task.score,
-                                                status = "pending"
+                                                score = task.score ?: 0.0,
+                                                status = task.status ?: "pending"
                                             ))
                                         }
                                     } catch (e: Exception) {
@@ -1110,6 +1110,9 @@ fun JarvisScreen(
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     var selectedImageBase64 by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
+    var isModelLoading by remember { mutableStateOf(false) }
+    var isModelLaunching by remember { mutableStateOf(false) }
+    var isOptimizing by remember { mutableStateOf(false) } // État pour le fallback/latence
     val coroutineScope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
@@ -1179,10 +1182,13 @@ fun JarvisScreen(
     }
 
 
-    // Couleur d'accent selon le thread (main = bleu primaire, autres = violet/orange)
-    val threadColor = if (currentThreadId == "main")
+    // Couleur d'accent dynamique : Gem > Thread > Défaut
+    val gemColorHex = availableModes.find { it["name"] == currentMode }?.get("color")
+    val gemColor = if (gemColorHex != null) Color(android.graphics.Color.parseColor(gemColorHex)) else null
+    
+    val threadColor = gemColor ?: (if (currentThreadId == "main")
         MaterialTheme.colorScheme.primary
-    else Color(0xFF9575CD)
+    else Color(0xFF9575CD))
 
     // Dialogue de création de nouveau thread
     if (showNewThreadDialog) {
@@ -1413,8 +1419,10 @@ fun JarvisScreen(
                 if (isLoading) {
                     item {
                         JarvisOrb(
-                            isThinking = true,
-                            isToolRunning = false, // On pourra brancher ça sur un état réel plus tard
+                            isThinking = !isModelLoading && !isModelLaunching && !isOptimizing,
+                            isToolRunning = false,
+                            isModelLoading = isModelLoading || isOptimizing,
+                            isModelLaunching = isModelLaunching,
                             baseColor = threadColor
                         )
                     }
@@ -1469,7 +1477,19 @@ fun JarvisScreen(
 
             JarvisModeSelector(
                 selectedMode = currentMode,
-                onModeSelected = { currentMode = it },
+                onModeSelected = { 
+                    if (it != currentMode) {
+                        currentMode = it
+                        // Petit effet visuel de chargement de modèle lors du changement de mode
+                        coroutineScope.launch {
+                            isModelLoading = true
+                            isLoading = true
+                            kotlinx.coroutines.delay(1200)
+                            isModelLoading = false
+                            isLoading = false
+                        }
+                    }
+                },
                 modes = availableModes,
                 onAddMode = { showCreateModeDialog = true }
             )
@@ -1588,8 +1608,8 @@ fun JarvisScreen(
                         shape = RoundedCornerShape(28.dp),
                         colors = TextFieldDefaults.outlinedTextFieldColors(
                             containerColor = Color.Transparent,
-                            unfocusedBorderColor = Color.Transparent,
-                            focusedBorderColor = Color.Transparent
+                            unfocusedBorderColor = threadColor.copy(alpha = 0.3f),
+                            focusedBorderColor = threadColor
                         ),
                         maxLines = 6
                     )
@@ -1620,8 +1640,17 @@ fun JarvisScreen(
                                 }
 
                                 isLoading = true
+                                isModelLaunching = true
+                                isOptimizing = false
                                 haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                coroutineScope.launch {
+                                
+                                val requestJob = coroutineScope.launch {
+                                    // Timer pour le "fallback" visuel
+                                    launch {
+                                        kotlinx.coroutines.delay(5000)
+                                        if (isLoading) isOptimizing = true
+                                    }
+                                    
                                     try {
                                         val prefs = context.getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
                                         var token = prefs.getString("google_id_token", null)
@@ -1632,6 +1661,7 @@ fun JarvisScreen(
                                             ChatRequest(userMsg, token, name, lat, lng, currentThreadId, mode = currentMode, image_base64 = selectedImageBase64)
                                         )
                                         selectedImageBase64 = null
+                                        isModelLaunching = false
 
 
                                         val rawText = response.response ?: response.text ?: "Aucune réponse."
@@ -1663,6 +1693,9 @@ fun JarvisScreen(
                                         if (currentThreadId == "main") onMessagesChange(updatedWithUser + errMsg)
                                     } finally {
                                         isLoading = false
+                                        isModelLaunching = false
+                                        isModelLoading = false
+                                        isOptimizing = false
                                     }
                                 }
                             }
@@ -1706,8 +1739,8 @@ fun JarvisScreen(
             exit = androidx.compose.animation.slideOutHorizontally() + androidx.compose.animation.fadeOut()
         ) {
             Surface(
-                modifier = Modifier.width(260.dp).fillMaxHeight(),
-                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier.width(260.dp).fillMaxHeight().blur(if (android.os.Build.VERSION.SDK_INT >= 31) 15.dp else 0.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
                 shadowElevation = 16.dp,
                 tonalElevation = 8.dp
             ) {
@@ -2192,6 +2225,8 @@ fun MemoryExplorerScreen(
 fun JarvisOrb(
     isThinking: Boolean = true,
     isToolRunning: Boolean = false,
+    isModelLoading: Boolean = false,
+    isModelLaunching: Boolean = false,
     toolName: String? = null,
     baseColor: Color = MaterialTheme.colorScheme.primary
 ) {
@@ -2219,6 +2254,8 @@ fun JarvisOrb(
 
     // Couleur dynamique
     val orbColor = when {
+        isModelLoading -> Color(0xFF00BCD4) // Cyan pour le chargement du modèle
+        isModelLaunching -> Color(0xFF4CAF50) // Vert pour le lancement API
         isToolRunning -> Color(0xFFFF9800) // Doré/Orange pour les outils
         else -> baseColor
     }
@@ -2272,7 +2309,7 @@ fun JarvisOrb(
                 
                 for (i in 0..360 step 30) {
                     val angle = Math.toRadians(i.toDouble())
-                    val variation = if (isThinking) Math.sin(angle * 4 + (rotation / 15).toDouble()) * 4 else 0.0
+                    val variation = if (isThinking || isModelLoading || isModelLaunching) Math.sin(angle * 4 + (rotation / 15).toDouble()) * 4 else 0.0
                     val r = radius + variation
                     val x = center.x + (r * Math.cos(angle)).toFloat()
                     val y = center.y + (r * Math.sin(angle)).toFloat()
@@ -2293,6 +2330,25 @@ fun JarvisOrb(
                     setShadowLayer(30f, 0f, 0f, orbColor.toArgb())
                 })
             }
+
+            // 5. Système de Particules "Synaptiques" (Nouveau)
+            if (isThinking || isToolRunning || isModelLaunching) {
+                repeat(8) { i ->
+                    val particleRotation = (rotation * (1f + i * 0.1f)) % 360f
+                    val particleDistance = 50.dp + (i * 2).dp
+                    val particleSize = 2.dp + (i % 3).dp
+                    
+                    Box(
+                        modifier = Modifier
+                            .graphicsLayer {
+                                rotationZ = particleRotation + (i * 45)
+                                translationX = particleDistance.toPx()
+                            }
+                            .size(particleSize)
+                            .background(orbColor.copy(alpha = 0.6f), CircleShape)
+                    )
+                }
+            }
             
             if (isToolRunning) {
                 CircularProgressIndicator(
@@ -2304,7 +2360,23 @@ fun JarvisOrb(
         }
 
         
-        if (isToolRunning && toolName != null) {
+        if (isModelLoading) {
+            Text(
+                if (isModelLoading && !isThinking && !isModelLaunching) "Chargement du modèle..." else "Optimisation du modèle...",
+                fontSize = 12.sp,
+                color = orbColor,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        } else if (isModelLaunching) {
+            Text(
+                "Lancement du modèle...",
+                fontSize = 12.sp,
+                color = orbColor,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        } else if (isToolRunning && toolName != null) {
             Text(
                 "Jarvis utilise : $toolName",
                 fontSize = 12.sp,
@@ -2469,9 +2541,11 @@ fun ModeChip(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val scale by animateFloatAsState(if (isSelected) 1.05f else 1f)
+
     Surface(
         onClick = onClick,
-        modifier = Modifier.padding(vertical = 4.dp),
+        modifier = Modifier.padding(vertical = 4.dp).graphicsLayer(scaleX = scale, scaleY = scale),
         shape = RoundedCornerShape(16.dp),
         color = if (isSelected) color.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         border = BorderStroke(1.dp, if (isSelected) color else Color.Transparent)
