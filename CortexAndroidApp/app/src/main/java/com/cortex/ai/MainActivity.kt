@@ -1113,6 +1113,8 @@ fun JarvisScreen(
     var isModelLoading by remember { mutableStateOf(false) }
     var isModelLaunching by remember { mutableStateOf(false) }
     var isOptimizing by remember { mutableStateOf(false) } // État pour le fallback/latence
+    var availableModes by remember { mutableStateOf<List<Map<String, String>>>(emptyList()) }
+    var currentMode by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
@@ -1432,8 +1434,6 @@ fun JarvisScreen(
             }
 
             // Sélecteur de modes
-            var availableModes by remember { mutableStateOf<List<Map<String, String>>>(emptyList()) }
-            var currentMode by remember { mutableStateOf<String?>(null) }
             var showCreateModeDialog by remember { mutableStateOf(false) }
             
             fun refreshModes() {
