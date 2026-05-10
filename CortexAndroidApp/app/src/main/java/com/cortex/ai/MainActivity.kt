@@ -709,7 +709,7 @@ fun MainScreen(
 
     Scaffold(
         modifier = Modifier.fillMaxSize()
-    ) { padding ->
+    ) { _ ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1105,7 +1105,7 @@ fun JarvisScreen(
         onRefreshToken: suspend () -> String?,
         isAutoReadEnabled: Boolean,
         onAutoReadToggle: (Boolean) -> Unit,
-        onPickImage: ((Uri) -> Unit) -> Unit // Nouvelle callback
+        onPickImage: ((Uri) -> Unit) -> Unit 
 ) {
     var input by remember { mutableStateOf("") }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
@@ -1113,7 +1113,7 @@ fun JarvisScreen(
     var isLoading by remember { mutableStateOf(false) }
     var isModelLoading by remember { mutableStateOf(false) }
     var isModelLaunching by remember { mutableStateOf(false) }
-    var isOptimizing by remember { mutableStateOf(false) } // État pour le fallback/latence
+    var isOptimizing by remember { mutableStateOf(false) }
     var availableModes by remember { mutableStateOf<List<Map<String, String>>>(emptyList()) }
     var currentMode by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
@@ -1495,26 +1495,6 @@ fun JarvisScreen(
                 onAddMode = { showCreateModeDialog = true }
             )
 
-
-            var selectedImageBase64 by remember { mutableStateOf<String?>(null) }
-            val imagePickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-                ActivityResultContracts.GetContent()
-            ) { uri: Uri? ->
-                uri?.let {
-                    coroutineScope.launch {
-                        try {
-                            val inputStream = context.contentResolver.openInputStream(it)
-                            val bytes = inputStream?.readBytes()
-                            if (bytes != null) {
-                                selectedImageBase64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
-                            }
-                        } catch (e: Exception) {
-                            Log.e("JarvisImage", "Erreur lecture image: ${e.message}")
-                        }
-                    }
-                }
-            }
-
             // Barre de saisie "Flottante"
 
             Surface(
@@ -1553,11 +1533,13 @@ fun JarvisScreen(
                             // Analyse d'image
                             IconButton(onClick = { 
                                 showTools = false
-                                imagePickerLauncher.launch("image/*") 
+                                onPickImage { uri ->
+                                    selectedImageUri = uri
+                                }
                             }) {
                                 Box {
                                     Icon(Icons.Default.Image, contentDescription = "Image", tint = threadColor)
-                                    if (selectedImageBase64 != null) {
+                                    if (selectedImageUri != null) {
                                         Surface(
                                             modifier = Modifier.size(8.dp).align(Alignment.TopEnd),
                                             shape = CircleShape,
@@ -1627,25 +1609,26 @@ fun JarvisScreen(
                                 threadMessages = updated
                                 if (currentThreadId == "main") onMessagesChange(updatedWithUser)
                                 input = ""
-                                if (selectedImageUri != null) {
-                                    try {
-                                        val inputStream = context.contentResolver.openInputStream(selectedImageUri!!)
-                                        val bytes = inputStream?.readBytes()
-                                        if (bytes != null) {
-                                            selectedImageBase64 = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
+                                
+                                coroutineScope.launch {
+                                    if (selectedImageUri != null) {
+                                        try {
+                                            val inputStream = context.contentResolver.openInputStream(selectedImageUri!!)
+                                            val bytes = inputStream?.readBytes()
+                                            if (bytes != null) {
+                                                selectedImageBase64 = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.e("JarvisVision", "Erreur encodage image: ${e.message}")
                                         }
                                         selectedImageUri = null
-                                    } catch (e: Exception) {
-                                        Log.e("JarvisVision", "Erreur encodage image: ${e.message}")
                                     }
-                                }
 
-                                isLoading = true
-                                isModelLaunching = true
-                                isOptimizing = false
-                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                
-                                val requestJob = coroutineScope.launch {
+                                    isLoading = true
+                                    isModelLaunching = true
+                                    isOptimizing = false
+                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                    
                                     // Timer pour le "fallback" visuel
                                     launch {
                                         kotlinx.coroutines.delay(5000)

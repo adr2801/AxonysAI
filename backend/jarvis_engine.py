@@ -80,6 +80,8 @@ class JarvisEngine:
         def search_eye(query: str): return self._run_async(mcp_server.search_eye(query))
         def search_deep_eye(query: str): return self._run_async(mcp_server.search_deep_eye(query))
         def listen_web(url: str): return self._run_async(mcp_server.listen_web(url))
+        def execute_python(code: str): return self._run_async(mcp_server.execute_python(code))
+        def read_project_file(relative_path: str): return self._run_async(mcp_server.read_project_file(relative_path))
         
         def memory_remember(fact: str): return self._run_async(mcp_server.memory_remember(context.user_id, fact))
         def memory_recall(query: str): return self._run_async(mcp_server.memory_recall(context.user_id, query))
@@ -111,7 +113,7 @@ class JarvisEngine:
             return self._run_async(mcp_server.task_manager(context.user_id, action, name, task_id, status, urgency, importance, duration, envy, energy))
 
         return [
-            search_eye, search_deep_eye, listen_web, memory_remember, memory_recall,
+            search_eye, search_deep_eye, listen_web, execute_python, read_project_file, memory_remember, memory_recall,
             gmail_list, gmail_get_content, gmail_send, gmail_delete,
             calendar_events, calendar_create, calendar_update, calendar_delete,
             drive_search, send_notification, leave_bridge_note, task_manager

@@ -17,6 +17,10 @@ SERPER_API_KEY = os.getenv("SERPER_API_KEY")
 TINYFISH_API_KEY = os.getenv("TINYFISH_API_KEY")
 DB_PATH = os.path.join(BASE_DIR, "jarvis_memory.db")
 
+import asyncio
+import sys
+import subprocess
+
 # Initialisation du serveur MCP
 mcp = FastMCP("Jarvis-Ultimate-Server")
 
@@ -53,6 +57,43 @@ async def listen_web(url: str) -> str:
                                 headers={"Authorization": f"Bearer {TINYFISH_API_KEY}"},
                                 json={"url": url, "format": "markdown"})
         return res.json().get("markdown", "Vide")[:4000]
+
+@mcp.tool()
+async def execute_python(code: str) -> str:
+    """LE LAB : Exécute du code Python et retourne le résultat. 
+    Idéal pour les maths, l'algorithmique (NSI) et les calculs complexes.
+    Utilise print() pour afficher le résultat final."""
+    try:
+        process = await asyncio.create_subprocess_exec(
+            sys.executable, "-c", code,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+        output = stdout.decode().strip()
+        error = stderr.decode().strip()
+        if error: return f"Sortie: {output}\nErreur: {error}"
+        return output if output else "Code exécuté avec succès."
+    except Exception as e:
+        return f"Échec de l'exécution : {str(e)}"
+
+@mcp.tool()
+async def read_project_file(relative_path: str) -> str:
+    """LIT UN FICHIER DU PROJET (Code, Cours, Notes). 
+    Le chemin doit être relatif à la racine du projet CortexAI."""
+    try:
+        # On remonte d'un cran car on est dans 'backend'
+        root_dir = BASE_DIR.parent
+        file_path = root_dir / relative_path
+        
+        if not file_path.exists():
+            return f"Fichier non trouvé : {relative_path}"
+            
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            return content[:5000] # Limite pour éviter de saturer le contexte
+    except Exception as e:
+        return f"Erreur de lecture : {str(e)}"
 
 # --- OUTILS DE MÉMOIRE ---
 
