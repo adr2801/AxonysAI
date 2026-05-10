@@ -727,7 +727,7 @@ fun MainScreen(
             ) { tab ->
                 when (tab) {
                     0 -> PrioritizerScreen(iaPrioriseur, prioritizedTasks, onTasksChange, onImpromptuBriefing)
-                    1 -> JarvisScreen(JarvisChatMessages, googleAccount, currentUserId, lat, lng, onMessagesChange, onRefreshToken, isAutoReadEnabled, onAutoReadToggle, onPickImage)
+                    1 -> JarvisScreen(JarvisChatMessages, googleAccount, currentUserId, currentLatitude, currentLongitude, onMessagesChange, onRefreshToken, isAutoReadEnabled, onAutoReadToggle, onPickImage)
 
                     2 -> SettingsScreen(
                         themeMode,
