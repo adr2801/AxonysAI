@@ -383,21 +383,29 @@ class MainActivity : ComponentActivity() {
                                 prefs.edit().putString("chat_history", Gson().toJson(it)).apply()
                             },
                             onTasksChange = { newList ->
+                                val oldList = prioritizedTasks
                                 prioritizedTasks = newList
                                 prefs.edit().putString("prioritized_tasks", Gson().toJson(newList)).apply()
                                 
-                                // Sync avec le serveur (Optionnel : On pourrait faire un diff)
                                 coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                     try {
-                                        // On pourrait envoyer chaque tâche ou un lot
-                                        // Pour l'instant on se concentre sur l'ajout des nouvelles
-                                        newList.lastOrNull()?.let { task ->
-                                            JarvisApiClient.apiService.addTask(currentUserId, TaskRequest(
-                                                name = task.name ?: "Sans titre",
-                                                urgency = 5, importance = 5, duration = 5, envy = 5, energy = 5,
-                                                score = task.score ?: 0.0,
-                                                status = task.status ?: "pending"
-                                            ))
+                                        if (newList.size < oldList.size) {
+                                            val deletedTask = oldList.find { old -> newList.none { it.name == old.name } }
+                                            deletedTask?.let { task ->
+                                                JarvisApiClient.apiService.deleteTask(currentUserId, mapOf(
+                                                    "id" to task.id,
+                                                    "name" to task.name
+                                                ))
+                                            }
+                                        } else if (newList.size > oldList.size) {
+                                            newList.lastOrNull()?.let { task ->
+                                                JarvisApiClient.apiService.addTask(currentUserId, TaskRequest(
+                                                    name = task.name ?: "Sans titre",
+                                                    urgency = 5, importance = 5, duration = 5, envy = 5, energy = 5,
+                                                    score = task.score ?: 0.0,
+                                                    status = task.status ?: "pending"
+                                                ))
+                                            }
                                         }
                                     } catch (e: Exception) {
                                         Log.e("JarvisSync", "Erreur sync task: ${e.message}")
@@ -1379,9 +1387,22 @@ fun JarvisScreen(
                                 )
                                 .combinedClickable(
                                     onLongClick = {
+                                        val msgToDelete = msg
                                         val updated = threadMessages.toMutableMap()
-                                        updated[currentThreadId] = currentMessages.filter { it != msg }
+                                        updated[currentThreadId] = currentMessages.filter { it != msgToDelete }
                                         threadMessages = updated
+                                        
+                                        // Suppression persistante sur le serveur
+                                        coroutineScope.launch {
+                                            try {
+                                                JarvisApiClient.apiService.deleteMessage(currentUserId, mapOf(
+                                                    "thread_id" to currentThreadId,
+                                                    "content" to msgToDelete.text
+                                                ))
+                                            } catch (e: Exception) {
+                                                Log.e("JarvisDelete", "Erreur suppression msg: ${e.message}")
+                                            }
+                                        }
                                     },
                                     onClick = {}
                                 )
@@ -2437,6 +2458,7 @@ fun CreateModeDialog(
     var instruction by remember { mutableStateOf("") }
     var icon by remember { mutableStateOf("💎") }
     var color by remember { mutableStateOf("#4285F4") }
+    val colors = listOf("Bleu", "Rouge", "Vert", "Jaune", "Violet", "Rose", "Cyan", "Orange")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2457,19 +2479,40 @@ fun CreateModeDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = icon,
                         onValueChange = { newIcon -> icon = newIcon },
                         label = { Text("Icône") },
                         modifier = Modifier.width(80.dp)
                     )
-                    OutlinedTextField(
-                        value = color,
-                        onValueChange = { newColor -> color = newColor },
-                        label = { Text("Couleur (Hex)") },
-                        modifier = Modifier.weight(1f)
-                    )
+                    
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Couleur", fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(colors) { cName ->
+                                val hex = when (cName) {
+                                    "Bleu" -> "#4285F4"
+                                    "Rouge" -> "#EA4335"
+                                    "Vert" -> "#34A853"
+                                    "Jaune" -> "#FBBC04"
+                                    "Violet" -> "#A142F4"
+                                    "Rose" -> "#FF69B4"
+                                    "Cyan" -> "#00FFFF"
+                                    "Orange" -> "#FF8C00"
+                                    else -> "#4285F4"
+                                }
+                                val isColSelected = color == hex
+                                Surface(
+                                    onClick = { color = hex },
+                                    modifier = Modifier.size(32.dp),
+                                    shape = CircleShape,
+                                    color = Color(android.graphics.Color.parseColor(hex)),
+                                    border = if (isColSelected) BorderStroke(2.dp, Color.Black) else null
+                                ) {}
+                            }
+                        }
+                    }
                 }
             }
         },

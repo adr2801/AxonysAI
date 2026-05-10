@@ -92,6 +92,31 @@ async def chat(request: ChatRequest):
         print(f"!!! ERREUR CRITIQUE API JARVIS (/chat) !!!\n{error_trace}")
         raise HTTPException(status_code=500, detail=str(e))
 
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/chat/{user_id}/delete")
+async def delete_chat_message(user_id: str, request: Request):
+    try:
+        data = await request.json()
+        thread_id = data.get("thread_id", "main")
+        content = data.get("content")
+        from jarvis_engine import memory_manager
+        memory_manager.delete_message(user_id, thread_id, content)
+        return {"status": "deleted"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/chat/{user_id}/clear")
+async def clear_chat_thread(user_id: str, request: Request):
+    try:
+        data = await request.json()
+        thread_id = data.get("thread_id", "main")
+        from jarvis_engine import memory_manager
+        memory_manager.clear_thread(user_id, thread_id)
+        return {"status": "cleared"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/anticipate")
 async def anticipate(request: ChatRequest):
     try:
@@ -361,11 +386,15 @@ async def add_task(user_id: str, request: TaskRequest):
 async def delete_task(user_id: str, request: Request):
     try:
         data = await request.json()
+        task_id = data.get("id")
         task_name = data.get("name")
         from jarvis_engine import memory_manager
         with memory_manager.get_conn() as conn:
             with conn.cursor() as cursor:
-                cursor.execute("DELETE FROM user_tasks WHERE user_id = %s AND name = %s", (user_id.lower(), task_name))
+                if task_id:
+                    cursor.execute("DELETE FROM user_tasks WHERE user_id = %s AND id = %s", (user_id.lower(), task_id))
+                else:
+                    cursor.execute("DELETE FROM user_tasks WHERE user_id = %s AND name = %s", (user_id.lower(), task_name))
             conn.commit()
         return {"status": "deleted"}
     except Exception as e:

@@ -184,6 +184,24 @@ class MemoryManager:
                 rows = cursor.fetchall()
         return [{"role": r[0], "content": r[1]} for r in reversed(rows)]
 
+    def delete_message(self, user_id, thread_id, content):
+        with self.get_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM conversation_history WHERE user_id = %s AND thread_id = %s AND content = %s",
+                    (user_id, thread_id, content)
+                )
+            conn.commit()
+
+    def clear_thread(self, user_id, thread_id):
+        with self.get_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM conversation_history WHERE user_id = %s AND thread_id = %s",
+                    (user_id, thread_id)
+                )
+            conn.commit()
+
     def set_user_preference(self, user_id, preference_key, preference_value):
         with self.get_conn() as conn:
             with conn.cursor() as cursor:

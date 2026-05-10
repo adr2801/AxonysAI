@@ -124,7 +124,13 @@ interface JarvisApiService {
     suspend fun addTask(@Path("user_id") userId: String, @Body task: TaskRequest): Any
 
     @POST("/tasks/{user_id}/delete")
-    suspend fun deleteTask(@Path("user_id") userId: String, @Body body: Map<String, String>): Any
+    suspend fun deleteTask(@Path("user_id") userId: String, @Body body: Map<String, Any?>): Any
+
+    @POST("/chat/{user_id}/delete")
+    suspend fun deleteMessage(@Path("user_id") userId: String, @Body body: Map<String, String?>): Any
+
+    @POST("/chat/{user_id}/clear")
+    suspend fun clearThread(@Path("user_id") userId: String, @Body body: Map<String, String>): Any
 }
 
 
