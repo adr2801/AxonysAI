@@ -11,8 +11,12 @@ android {
         applicationId = "com.cortex.ai"
         minSdk = 24
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.2.1"
+        versionCode = 9
+        versionName = "1.3.0"
+
+
+
+
         setProperty("archivesBaseName", "CortexAI")
 
 
@@ -62,6 +66,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
     
     // Retrofit pour Hugging Face API
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
