@@ -19,7 +19,12 @@ data class JarvisChatMessage(
 )
 
 
-data class TaskItem(val name: String, val score: Double)
+data class TaskItem(
+    val id: Int? = null,
+    val name: String? = "Sans titre",
+    val score: Double? = 0.0,
+    val status: String? = "pending"
+)
 
 data class ThreadResponse(val threads: List<String>)
 

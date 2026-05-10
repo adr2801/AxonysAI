@@ -1022,8 +1022,8 @@ fun PrioritizerScreen(
                                             energy.toDouble()
                                     )
                             val newList =
-                                    (tasks + TaskItem(taskName, score * 100)).sortedByDescending {
-                                        it.score
+                                    (tasks + TaskItem(name = taskName, score = score * 100)).sortedByDescending {
+                                        it.score ?: 0.0
                                     }
                             onTasksChange(newList)
                             taskName = ""
@@ -1043,7 +1043,7 @@ fun PrioritizerScreen(
             Text("Ma Liste de Priorités", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(modifier = Modifier.height(8.dp))
         }
-        items(tasks, key = { it.name + it.score }) { task ->
+        items(tasks, key = { it.id ?: (it.name.hashCode() + (it.score ?: 0.0).hashCode()) }) { task ->
             AnimatedVisibility(
                     visible = true,
                     enter = slideInVertically() + fadeIn(),
@@ -1928,9 +1928,10 @@ fun SettingsScreen(
 
 @Composable
 fun TaskCard(task: TaskItem, onDelete: () -> Unit) {
+    val taskScore = task.score ?: 0.0
     val accentColor =
-            if (task.score >= 70) Color(0xFFFF5252)
-            else if (task.score >= 40) Color(0xFFFFB300)
+            if (taskScore >= 70) Color(0xFFFF5252)
+            else if (taskScore >= 40) Color(0xFFFFB300)
             else Color(0xFF00E676)
             
     Card(
@@ -1957,8 +1958,8 @@ fun TaskCard(task: TaskItem, onDelete: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(task.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("Priorité : ${task.score.toInt()}%", fontSize = 12.sp, color = Color.Gray)
+                    Text(task.name ?: "Sans titre", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("Priorité : ${(task.score ?: 0.0).toInt()}%", fontSize = 12.sp, color = Color.Gray)
                 }
                 IconButton(
                     onClick = onDelete,
