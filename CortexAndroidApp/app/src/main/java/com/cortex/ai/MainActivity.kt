@@ -61,29 +61,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
-
-import androidx.work.*
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.api.ApiException
-import com.google.android.gms.common.api.Scope
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-
-// --- Modèles ---
-// Redondances supprimées : ThemeMode, JarvisChatMessage, TaskItem définis dans Models.kt
-
-@OptIn(ExperimentalMaterial3Api::class)
-class MainActivity : ComponentActivity() {
+import androidx.compose.ui.unit {
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private var updateLocation: ((Double, Double) -> Unit)? = null
@@ -194,9 +172,31 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        
-        val iaPrioriseur = MlpPrioriseur()
+        .dp
+import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 
+import androidx.work.*
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.Scope
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+// --- Modèles ---
+// Redondances supprimées : ThemeMode, JarvisChatMessage, TaskItem définis dans Models.kt
+
+@OptIn(ExperimentalMaterial3Api::class)
+class MainActivity : ComponentActivity()
+        val iaPrioriseur = MlpPrioriseur()
+        val lastAccount = GoogleSignIn.getLastSignedInAccount(this)
         val prefs = getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
         val savedTheme =
                 prefs.getString("theme_mode", ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name
