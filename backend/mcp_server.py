@@ -232,6 +232,77 @@ async def send_to_dev(content: str, category: str = "NOTE") -> str:
     return f"Informations transmises au développement dans 'dev_workspace.md'."
 
 @mcp.tool()
+async def task_manager(user_id: str, action: str, name: Optional[str] = None, task_id: Optional[int] = None, status: Optional[str] = None, urgency: int = 5, importance: int = 5, duration: int = 5, envy: int = 5, energy: int = 5) -> str:
+    """Gère la liste de tâches priorisées (MLP). 
+    Actions: 'list', 'add', 'update', 'delete'.
+    Pour 'add' et 'update', les paramètres urgency/importance/etc. permettent de calculer le score de priorité (0-10)."""
+    try:
+        from memory_manager import MemoryManager
+        mm = MemoryManager()
+        
+        if action == "list":
+            with mm.get_conn() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT id, name, score, status FROM user_tasks WHERE user_id = %s ORDER BY score DESC", (user_id,))
+                    rows = cursor.fetchall()
+                    if not rows: return "Aucune tâche pour le moment."
+                    return "\n".join([f"[{r[0]}] {r[1]} - Priorité: {int(r[2]*100)}% - Statut: {r[3]}" for r in rows])
+        
+        elif action == "add":
+            if not name: return "Nom de tâche manquant."
+            # On laisse le backend calculer le score lors de l'insertion ou l'appli lors du sync
+            # Mais ici on peut faire un calcul rapide (simulé pour l'instant, sera affiné par l'API)
+            score = (urgency + importance + (10-duration) + envy + energy) / 50.0
+            with mm.get_conn() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "INSERT INTO user_tasks (user_id, name, score, urgency, importance, duration, envy, energy) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                        (user_id, name, score, urgency, importance, duration, envy, energy)
+                    )
+                    new_id = cursor.fetchone()[0]
+                conn.commit()
+            return f"Tâche '{name}' ajoutée (ID: {new_id}, Score: {int(score*100)}%)."
+
+        elif action == "update":
+            if not task_id: return "ID de tâche manquant pour la mise à jour."
+            updates = []
+            params = []
+            if name: 
+                updates.append("name = %s")
+                params.append(name)
+            if status:
+                updates.append("status = %s")
+                params.append(status)
+            
+            # Recalcul du score si l'un des paramètres MLP est fourni
+            # On récupère les anciennes valeurs si non fournies ? 
+            # Pour faire simple on recalcule avec ce qui est passé
+            score = (urgency + importance + (10-duration) + envy + energy) / 50.0
+            updates.append("score = %s, urgency = %s, importance = %s, duration = %s, envy = %s, energy = %s")
+            params.extend([score, urgency, importance, duration, envy, energy])
+            
+            params.append(task_id)
+            query = f"UPDATE user_tasks SET {', '.join(updates)} WHERE id = %s"
+            
+            with mm.get_conn() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(query, tuple(params))
+                conn.commit()
+            return f"Tâche {task_id} mise à jour (Nouveau score: {int(score*100)}%)."
+
+        elif action == "delete":
+            if not task_id: return "ID de tâche manquant."
+            with mm.get_conn() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("DELETE FROM user_tasks WHERE id = %s", (task_id,))
+                conn.commit()
+            return f"Tâche {task_id} supprimée."
+            
+        return "Action non reconnue."
+    except Exception as e:
+        return f"Erreur TaskManager : {str(e)}"
+
+@mcp.tool()
 async def leave_bridge_note(title: str, content: str, category: str = "INFO") -> str:
     """Laisse une note dans le fichier pont (bridge) pour qu'Antoine puisse la lire dans l'application.
     Utilise cet outil pour signaler des tâches importantes, des bugs détectés, ou des idées à développer."""

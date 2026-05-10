@@ -51,6 +51,16 @@ class ModeRequest(BaseModel):
     icon: Optional[str] = "💎"
     color: Optional[str] = "#4285F4"
 
+class TaskRequest(BaseModel):
+    name: str
+    urgency: int = 5
+    importance: int = 5
+    duration: int = 5
+    envy: int = 5
+    energy: int = 5
+    status: Optional[str] = "pending"
+    score: Optional[float] = 0.0
+
 
 @app.get("/")
 async def root():
@@ -296,6 +306,67 @@ async def delete_mode(user_id: str, request: Request):
         data = await request.json()
         mode_name = data.get("name")
         memory_manager.delete_user_mode(user_id, mode_name)
+        return {"status": "deleted"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/tasks/{user_id}")
+async def get_tasks(user_id: str):
+    try:
+        from jarvis_engine import memory_manager
+        with memory_manager.get_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT name, score, urgency, importance, duration, envy, energy, status, id FROM user_tasks WHERE user_id = %s ORDER BY score DESC",
+                    (user_id.lower(),)
+                )
+                rows = cursor.fetchall()
+        
+        tasks = []
+        for r in rows:
+            tasks.append({
+                "name": r[0],
+                "score": r[1] * 100, # Conversion en % pour l'app
+                "urgency": r[2],
+                "importance": r[3],
+                "duration": r[4],
+                "envy": r[5],
+                "energy": r[6],
+                "status": r[7],
+                "id": r[8]
+            })
+        return {"tasks": tasks}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/tasks/{user_id}")
+async def add_task(user_id: str, request: TaskRequest):
+    try:
+        from jarvis_engine import memory_manager
+        # Si le score n'est pas fourni, on pourrait appeler le MLP prioritizer ici (à faire plus tard)
+        # Pour l'instant on stocke ce qui vient de l'app ou de Jarvis
+        with memory_manager.get_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO user_tasks (user_id, name, score, urgency, importance, duration, envy, energy, status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (user_id.lower(), request.name, request.score / 100.0, request.urgency, request.importance, request.duration, request.envy, request.energy, request.status)
+                )
+            conn.commit()
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/tasks/{user_id}/delete")
+async def delete_task(user_id: str, request: Request):
+    try:
+        data = await request.json()
+        task_name = data.get("name")
+        from jarvis_engine import memory_manager
+        with memory_manager.get_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("DELETE FROM user_tasks WHERE user_id = %s AND name = %s", (user_id.lower(), task_name))
+            conn.commit()
         return {"status": "deleted"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

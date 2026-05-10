@@ -98,23 +98,21 @@ class MainActivity : ComponentActivity() {
 
     private fun requestLocation() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
+            // Utilisation de getCurrentLocation pour forcer une position fraîche
+            val task = fusedLocationClient.getCurrentLocation(
+                com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY,
+                null
+            )
+            task.addOnSuccessListener { location: Location? ->
                 if (location != null) {
+                    Log.d("CortexGPS", "Position fraîche reçue: ${location.latitude}, ${location.longitude}")
                     updateLocation?.invoke(location.latitude, location.longitude)
                 } else {
-                    // Si lastLocation est nul, on demande une mise à jour ponctuelle
-                    val locationRequest = com.google.android.gms.location.LocationRequest.create().apply {
-                        priority = com.google.android.gms.location.LocationRequest.PRIORITY_HIGH_ACCURACY
-                        numUpdates = 1
-                    }
-                    fusedLocationClient.requestLocationUpdates(locationRequest, object : com.google.android.gms.location.LocationCallback() {
-                        override fun onLocationResult(result: com.google.android.gms.location.LocationResult) {
-                            result.lastLocation?.let {
-                                updateLocation?.invoke(it.latitude, it.longitude)
-                            }
-                        }
-                    }, android.os.Looper.getMainLooper())
+                    Log.e("CortexGPS", "Impossible de récupérer la position actuelle (null)")
                 }
+            }
+            task.addOnFailureListener { e ->
+                Log.e("CortexGPS", "Échec requête GPS: ${e.message}")
             }
         } else {
             requestPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
@@ -140,6 +138,12 @@ class MainActivity : ComponentActivity() {
             }
 
     private var onAuthSuccess: ((String) -> Unit)? = null
+    
+    private val imagePickerLauncher = 
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+            uri?.let { onImageSelected?.invoke(it) }
+        }
+    private var onImageSelected: ((Uri) -> Unit)? = null
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
@@ -249,6 +253,16 @@ class MainActivity : ComponentActivity() {
             var currentLatitude by remember { mutableStateOf<Double?>(null) }
             var currentLongitude by remember { mutableStateOf<Double?>(null) }
             
+            // --- Synchronisation des Tâches avec Supabase ---
+            LaunchedEffect(googleAccount) {
+                try {
+                    val response = JarvisApiClient.apiService.getTasks(currentUserId)
+                    prioritizedTasks = response.tasks
+                } catch (e: Exception) {
+                    Log.e("JarvisTasks", "Erreur sync tâches: ${e.message}")
+                }
+            }
+
             updateLocation = { lat, lng ->
                 currentLatitude = lat
                 currentLongitude = lng
@@ -361,11 +375,27 @@ class MainActivity : ComponentActivity() {
                                 JarvisChatMessages = it
                                 prefs.edit().putString("chat_history", Gson().toJson(it)).apply()
                             },
-                            onTasksChange = {
-                                prioritizedTasks = it
-                                prefs.edit()
-                                        .putString("prioritized_tasks", Gson().toJson(it))
-                                        .apply()
+                            onTasksChange = { newList ->
+                                prioritizedTasks = newList
+                                prefs.edit().putString("prioritized_tasks", Gson().toJson(newList)).apply()
+                                
+                                // Sync avec le serveur (Optionnel : On pourrait faire un diff)
+                                coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    try {
+                                        // On pourrait envoyer chaque tâche ou un lot
+                                        // Pour l'instant on se concentre sur l'ajout des nouvelles
+                                        newList.lastOrNull()?.let { task ->
+                                            JarvisApiClient.apiService.addTask(currentUserId, TaskRequest(
+                                                name = task.name,
+                                                urgency = 5, importance = 5, duration = 5, envy = 5, energy = 5,
+                                                score = task.score,
+                                                status = "pending"
+                                            ))
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e("JarvisSync", "Erreur sync task: ${e.message}")
+                                    }
+                                }
                             },
                             onGoogleSignIn = { startGoogleSignIn() },
                             onGoogleSignOut = { signOutGoogle() },
@@ -1065,9 +1095,12 @@ fun JarvisScreen(
         onMessagesChange: (List<JarvisChatMessage>) -> Unit,
         onRefreshToken: suspend () -> String?,
         isAutoReadEnabled: Boolean,
-        onAutoReadToggle: (Boolean) -> Unit
+        onAutoReadToggle: (Boolean) -> Unit,
+        onPickImage: ((Uri) -> Unit) -> Unit // Nouvelle callback
 ) {
     var input by remember { mutableStateOf("") }
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedImageBase64 by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -1336,14 +1369,34 @@ fun JarvisScreen(
                                     onClick = {}
                                 )
                         ) {
-                            Text(
-                                msg.text,
-                                modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
-                                color = textColor,
-                                fontSize = 16.sp,
-                                lineHeight = 24.sp,
-                                fontWeight = FontWeight.Normal
-                            )
+                            if (msg.isUser || !msg.isNew) {
+                                Text(
+                                    msg.text,
+                                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                                    color = textColor,
+                                    fontSize = 16.sp,
+                                    lineHeight = 24.sp,
+                                    fontWeight = FontWeight.Normal
+                                )
+                            } else {
+                                // Effet de typing pour les nouveaux messages Jarvis
+                                TypewriterText(
+                                    text = msg.text,
+                                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                                    color = textColor,
+                                    onComplete = {
+                                        // On marque le message comme "non nouveau" une fois fini pour éviter de rejouer l'anim au scroll
+                                        val updated = threadMessages.toMutableMap()
+                                        val currentList = updated[currentThreadId]?.toMutableList() ?: mutableListOf()
+                                        val idx = currentList.indexOf(msg)
+                                        if (idx != -1) {
+                                            currentList[idx] = msg.copy(isNew = false)
+                                            updated[currentThreadId] = currentList
+                                            threadMessages = updated
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -1545,6 +1598,19 @@ fun JarvisScreen(
                                 threadMessages = updated
                                 if (currentThreadId == "main") onMessagesChange(updatedWithUser)
                                 input = ""
+                                if (selectedImageUri != null) {
+                                    try {
+                                        val inputStream = context.contentResolver.openInputStream(selectedImageUri!!)
+                                        val bytes = inputStream?.readBytes()
+                                        if (bytes != null) {
+                                            selectedImageBase64 = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
+                                        }
+                                        selectedImageUri = null
+                                    } catch (e: Exception) {
+                                        Log.e("JarvisVision", "Erreur encodage image: ${e.message}")
+                                    }
+                                }
+
                                 isLoading = true
                                 haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                                 coroutineScope.launch {
@@ -1568,7 +1634,7 @@ fun JarvisScreen(
                                         
                                         haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                         
-                                        val jarvisMsg = JarvisChatMessage(text = cleanText, isUser = false, isError = false)
+                                        val jarvisMsg = JarvisChatMessage(text = cleanText, isUser = false, isError = false, isNew = true)
                                         
                                         // Lecture vocale automatique si activée
                                         if (isAutoReadEnabled) {
@@ -2359,6 +2425,33 @@ fun CreateModeDialog(
 }
 
 @Composable
+fun TypewriterText(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+    onComplete: () -> Unit = {}
+) {
+    var displayedText by remember { mutableStateOf("") }
+    
+    LaunchedEffect(text) {
+        text.forEachIndexed { index, _ ->
+            displayedText = text.substring(0, index + 1)
+            kotlinx.coroutines.delay(15) // Vitesse de frappe (15ms par caractère)
+        }
+        onComplete()
+    }
+    
+    Text(
+        text = displayedText,
+        modifier = modifier,
+        color = color,
+        fontSize = 16.sp,
+        lineHeight = 24.sp,
+        fontWeight = FontWeight.Normal
+    )
+}
+
+@Composable
 fun ModeChip(
     name: String,
     icon: String,
@@ -2367,17 +2460,23 @@ fun ModeChip(
     onClick: () -> Unit
 ) {
     Surface(
-        modifier = Modifier.clickable { onClick() },
-        shape = RoundedCornerShape(20.dp),
-        color = if (isSelected) color.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-        border = androidx.compose.foundation.BorderStroke(
-            width = if (isSelected) 1.5.dp else 0.5.dp,
-            color = if (isSelected) color else Color.Gray.copy(alpha = 0.3f)
-        )
+        onClick = onClick,
+        modifier = Modifier.padding(vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = if (isSelected) color.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        border = BorderStroke(1.dp, if (isSelected) color else Color.Transparent)
     ) {
-        Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(icon, modifier = Modifier.padding(end = 4.dp))
-            Text(name, fontSize = 13.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(icon, fontSize = 16.sp, modifier = Modifier.padding(end = 8.dp))
+            Text(
+                name,
+                fontSize = 13.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = if (isSelected) color else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+            )
         }
     }
 }

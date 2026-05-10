@@ -107,11 +107,14 @@ class JarvisEngine:
             L'IA de dev lira ce fichier pour comprendre ce qui s'est passé en production sans que tu aies à tout réexpliquer."""
             return self._run_async(mcp_server.leave_bridge_note(title, content, category))
 
+        def task_manager(action: str, name: Optional[str] = None, task_id: Optional[int] = None, status: Optional[str] = None, urgency: int = 5, importance: int = 5, duration: int = 5, envy: int = 5, energy: int = 5):
+            return self._run_async(mcp_server.task_manager(context.user_id, action, name, task_id, status, urgency, importance, duration, envy, energy))
+
         return [
             search_eye, search_deep_eye, listen_web, memory_remember, memory_recall,
             gmail_list, gmail_get_content, gmail_send, gmail_delete,
             calendar_events, calendar_create, calendar_update, calendar_delete,
-            drive_search, send_notification, leave_bridge_note
+            drive_search, send_notification, leave_bridge_note, task_manager
         ]
 
 
@@ -136,7 +139,14 @@ class JarvisEngine:
                 for role, content_json in rows:
                     try:
                         parts_data = json.loads(content_json)
-                        parts = [types.Part(text=p["text"]) for p in parts_data if "text" in p]
+                        parts = []
+                        for p in parts_data:
+                            if "text" in p:
+                                parts.append(types.Part(text=p["text"]))
+                            elif "function_call" in p:
+                                # Si on avait stocké des appels de fonction, on les reconstruirait ici
+                                # Pour l'instant, on se concentre sur la robustesse du texte
+                                pass
                         if parts:
                             initial_history.append(types.Content(role=role, parts=parts))
                     except Exception:
@@ -158,10 +168,14 @@ class JarvisEngine:
                 if target_mode:
                     mode_instruction = f"\n[MODE {target_mode['name'].upper()}] : {target_mode['instruction']}"
 
-            instruction = f"""Tu es Jarvis, le majordome IA d'Antoine. Date: {date_str}. Position: {context.lat}, {context.lng}.
+            instruction = f"""Tu es JARVIS, le majordome IA d'Antoine. Date: {date_str}. Position: {context.lat}, {context.lng}.
 {user_facts}{mode_instruction}
-Outils disponibles : Gmail, Calendrier, Drive, Recherche web, Mémoire, Notifications.
-Réponds toujours en français, de façon concise et utile."""
+Directives :
+1. TON : Poli, efficace, avec une touche d'humour britannique (Paul Bettany style).
+2. TÂCHES : Utilise 'task_manager' (actions: list, add, update, delete) pour gérer les priorités d'Antoine. Tu peux mettre à jour le statut ou recalculer le score MLP.
+3. PROACTIVITÉ : Anticipe les besoins (météo, trafic, emails urgents).
+4. VISION : Tu peux analyser les images reçues (OCR, objets, code).
+Réponds toujours en français, de façon concise et élégante."""
             
             config = types.GenerateContentConfig(
                 system_instruction=instruction, 
@@ -190,7 +204,25 @@ Réponds toujours en français, de façon concise et utile."""
             print(f"Erreur append historique Supabase: {e}")
 
 
+    async def _detect_mode(self, query: str) -> Optional[str]:
+        """Détecte le meilleur mode Jarvis pour la requête (Invisible Switching)."""
+        q = query.lower()
+        if any(word in q for word in ["code", "python", "script", "erreur", "bug", "fonction"]):
+            return "Coder"
+        if any(word in q for word in ["analyse", "données", "chiffres", "comparaison", "marché"]):
+            return "Analyst"
+        if any(word in q for word in ["crée", "invente", "écris", "poème", "histoire", "idée"]):
+            return "Creative"
+        if any(word in q for word in ["rendez-vous", "réserve", "organise", "rappel", "email", "calendrier"]):
+            return "Concierge"
+        return None
+
     async def process_query(self, prompt: str, google_token: Optional[str] = None, user_name: str = "Antoine", lat: Optional[float] = None, lng: Optional[float] = None, thread_id: str = "main", save_to_history: bool = True, mode: Optional[str] = None, image_base64: Optional[str] = None) -> str:
+        # 0. Détection automatique du mode si non spécifié
+        if not mode:
+            mode = await self._detect_mode(prompt)
+            if mode: print(f"--- Jarvis bascule automatiquement en mode: {mode} ---")
+            
         context.token, context.lat, context.lng = google_token, lat, lng
         safe_user_name = "".join(c for c in user_name if c.isalnum() or c in (' ', '_')).replace(" ", "_").lower() or "default"
         context.user_id = safe_user_name
@@ -231,21 +263,35 @@ Réponds toujours en français, de façon concise et utile."""
                 self.sessions_history[full_id].append(user_content)
                 self._append_to_history(safe_user_name, "user", user_content.parts, thread_id)
             
+            # --- Logique de Retry avec Backoff ---
+            max_retries = 3
+            retry_delay = 1.5
+            
+            async def send_with_retry(session, parts):
+                for i in range(max_retries):
+                    try:
+                        return await loop.run_in_executor(None, lambda: session.send_message(parts))
+                    except Exception as e:
+                        error_msg = str(e)
+                        if "500" in error_msg or "INTERNAL" in error_msg or "saturation" in error_msg.lower():
+                            if i < max_retries - 1:
+                                wait = retry_delay * (2 ** i)
+                                print(f"⚠️ Erreur 500/Saturation détectée. Tentative {i+1}/{max_retries} dans {wait}s...")
+                                await asyncio.sleep(wait)
+                                continue
+                        raise e
+
             try:
                 loop = asyncio.get_event_loop()
-                response = await loop.run_in_executor(None, lambda: chat_session.send_message(message_parts))
+                # Appel au modèle principal avec retry
+                response = await send_with_retry(chat_session, message_parts)
             except Exception as e:
-                print(f"⚠️ Modèle principal ({self.model_id}) saturé ou erreur : {e}. Tentative de repli sur {self.fallback_model_id}...")
+                print(f"⚠️ Modèle principal ({self.model_id}) en échec après retries : {e}. Tentative de repli sur {self.fallback_model_id}...")
                 try:
-                    # On utilise l'historique local pour reconstruire la session de secours
-                    # On retire le dernier message car send_message va l'ajouter
+                    # Reconstruction d'une session de secours propre
                     hist = self.sessions_history.get(full_id, [])
-                    if save_to_history and len(hist) > 0:
-                        fallback_history = hist[:-1]
-                    else:
-                        fallback_history = hist
-
-                    # Récupération de la config stockée
+                    fallback_history = hist[:-1] if save_to_history and len(hist) > 0 else hist
+                    
                     mode_id = f"{safe_user_name}_{thread_id}_{mode}" if mode else f"{safe_user_name}_{thread_id}"
                     config = self.sessions_configs.get(mode_id)
 
@@ -255,11 +301,14 @@ Réponds toujours en français, de façon concise et utile."""
                         history=fallback_history
                     )
 
-                    response = await loop.run_in_executor(None, lambda: fallback_chat.send_message(message_parts))
+                    # Tentative d'envoi avec le modèle de secours (aussi avec retry)
+                    response = await send_with_retry(fallback_chat, message_parts)
                     print(f"✅ Repli réussi avec {self.fallback_model_id}")
                 except Exception as fallback_err:
-                    print(f"❌ Échec du repli sur {self.fallback_model_id} : {fallback_err}")
-                    return f"Erreur cognitive critique : Les deux modèles ({self.model_id} et {self.fallback_model_id}) sont indisponibles. Détail : {str(e)}"
+                    import traceback
+                    print(f"❌ Échec critique du repli sur {self.fallback_model_id} : {fallback_err}")
+                    print(traceback.format_exc())
+                    return f"Désolé Antoine, les serveurs de Google semblent saturés en ce moment (Erreur 500 persistante). Réessaye dans quelques instants. (Détail: {str(fallback_err)})"
 
             if save_to_history:
 

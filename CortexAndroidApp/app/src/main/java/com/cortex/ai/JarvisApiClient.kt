@@ -35,6 +35,19 @@ data class JarvisMode(val id: Int, val name: String, val instruction: String, va
 data class ModeRequest(val name: String, val instruction: String, val icon: String?, val color: String?)
 data class ModeResponse(val modes: List<JarvisMode>)
 
+data class TaskRequest(
+    val name: String,
+    val urgency: Int,
+    val importance: Int,
+    val duration: Int,
+    val envy: Int,
+    val energy: Int,
+    val score: Double,
+    val status: String = "pending"
+)
+
+data class TaskResponse(val tasks: List<TaskItem>)
+
 data class AnticipateResponse(
     val status: String,
     val notifications: List<JarvisNotification>? = null
@@ -103,6 +116,15 @@ interface JarvisApiService {
         @Path("user_id") userId: String,
         @Body request: SetPreferenceRequest
     ): Any
+
+    @GET("/tasks/{user_id}")
+    suspend fun getTasks(@Path("user_id") userId: String): TaskResponse
+
+    @POST("/tasks/{user_id}")
+    suspend fun addTask(@Path("user_id") userId: String, @Body task: TaskRequest): Any
+
+    @POST("/tasks/{user_id}/delete")
+    suspend fun deleteTask(@Path("user_id") userId: String, @Body body: Map<String, String>): Any
 }
 
 
@@ -111,9 +133,9 @@ object JarvisApiClient {
     private const val BASE_URL = "https://addrr-cortex-ai.hf.space/"
 
     private val okHttpClient = okhttp3.OkHttpClient.Builder()
-        .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-        .writeTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        .connectTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
         .build()
 
     val apiService: JarvisApiService by lazy {
