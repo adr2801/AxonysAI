@@ -425,7 +425,8 @@ class MainActivity : ComponentActivity() {
                             onAutoReadToggle = { 
                                 isAutoReadEnabled = it
                                 prefs.edit().putBoolean("auto_read_enabled", it).apply()
-                            }
+                            },
+                            onPickImage = onPickImage
                     )
 
 
@@ -634,7 +635,8 @@ fun MainScreen(
         isMemoryExplorerOpen: Boolean,
         onMemoryExplorerToggle: (Boolean) -> Unit,
         isAutoReadEnabled: Boolean,
-        onAutoReadToggle: (Boolean) -> Unit
+        onAutoReadToggle: (Boolean) -> Unit,
+        onPickImage: ((Uri) -> Unit) -> Unit
 ) {
 
 
@@ -727,7 +729,7 @@ fun MainScreen(
             ) { tab ->
                 when (tab) {
                     0 -> PrioritizerScreen(iaPrioriseur, prioritizedTasks, onTasksChange, onImpromptuBriefing)
-                    1 -> JarvisScreen(JarvisChatMessages, googleAccount, currentUserId, currentLatitude, currentLongitude, onMessagesChange, onRefreshToken, isAutoReadEnabled, onAutoReadToggle, onPickImage)
+                    1 -> JarvisScreen(JarvisChatMessages, googleAccount, currentUserId, lat, lng, onMessagesChange, onRefreshToken, isAutoReadEnabled, onAutoReadToggle, onPickImage)
 
                     2 -> SettingsScreen(
                         themeMode,
