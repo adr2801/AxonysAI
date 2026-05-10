@@ -157,10 +157,20 @@ class JarvisEngine:
             except Exception as e:
                 print(f"Erreur chargement historique Supabase: {e}")
 
-            facts = memory_manager.get_relevant_facts(session_id, top_k=5)
-            user_facts = "\nSOUVENIRS :\n" + "\n".join([f"- {f}" for f in facts]) if facts else ""
+            # Chargement des souvenirs : top 10 pour le system prompt (vue large)
+            all_facts = memory_manager.get_relevant_facts(session_id, top_k=10)
+            user_facts_str = ""
+            if all_facts:
+                user_facts_str = "\n\n📌 CE QUE TU SAIS SUR L'UTILISATEUR (utilise ces infos proactivement) :\n" + "\n".join([f"  • {f}" for f in all_facts])
+            
             now_paris = datetime.now(ZoneInfo("Europe/Paris"))
             date_str = now_paris.strftime("%A %d %B %Y, %H:%M")
+            
+            # Préférences utilisateur
+            prefs = memory_manager.get_user_preferences(session_id)
+            prefs_str = ""
+            if prefs:
+                prefs_str = "\n\n⚙️ PRÉFÉRENCES CONNUES :\n" + "\n".join([f"  • {k}: {v}" for k, v in prefs.items()])
             
             # Récupération de l'instruction du mode si spécifié
             mode_instruction = ""
@@ -168,16 +178,19 @@ class JarvisEngine:
                 all_modes = memory_manager.get_user_modes(session_id)
                 target_mode = next((m for m in all_modes if m["name"].lower() == mode.lower()), None)
                 if target_mode:
-                    mode_instruction = f"\n[MODE {target_mode['name'].upper()}] : {target_mode['instruction']}"
+                    mode_instruction = f"\n\n🎭 [MODE ACTIF : {target_mode['name'].upper()}]\n{target_mode['instruction']}"
 
-            instruction = f"""Tu es JARVIS, le majordome IA d'Antoine. Date: {date_str}. Position: {context.lat}, {context.lng}.
-{user_facts}{mode_instruction}
-Directives :
-1. TON : Poli, efficace, avec une touche d'humour britannique (Paul Bettany style).
-2. TÂCHES : Utilise 'task_manager' (actions: list, add, update, delete) pour gérer les priorités d'Antoine. Tu peux mettre à jour le statut ou recalculer le score MLP.
-3. PROACTIVITÉ : Anticipe les besoins (météo, trafic, emails urgents).
-4. VISION : Tu peux analyser les images reçues (OCR, objets, code).
-Réponds toujours en français, de façon concise et élégante."""
+            instruction = f"""Tu es JARVIS, le majordome IA d'Antoine. Date actuelle: {date_str}. Position GPS: {context.lat}, {context.lng}.{user_facts_str}{prefs_str}{mode_instruction}
+
+DIRECTIVES FONDAMENTALES :
+1. TON : Poli, efficace, avec une touche d'humour britannique (Paul Bettany style). Appelle toujours l'utilisateur par son prénom.
+2. MÉMOIRE : Utilise ACTIVEMENT les souvenirs ci-dessus pour personnaliser tes réponses. Si quelqu'un te demande ce que tu sais sur lui, liste précisément les faits.
+3. APPRENTISSAGE : Quand tu apprends un fait important sur l'utilisateur, utilise 'memory_remember' pour le mémoriser. Exemples : préférences, projets en cours, personnes importantes.
+4. TÂCHES : Utilise 'task_manager' (list/add/update/delete) pour les priorités. Propose de créer une tâche si la demande s'y prête.
+5. PROACTIVITÉ : Anticipe les besoins (météo, trafic, emails urgents) et signale les anomalies.
+6. VISION : Tu peux analyser les images (OCR, objets, code, documents).
+7. CODE : Pour les calculs ou l'algorithmique, utilise 'execute_python' pour donner des résultats exacts.
+Réponds TOUJOURS en français, de façon concise et élégante."""
             
             config = types.GenerateContentConfig(
                 system_instruction=instruction, 
@@ -209,15 +222,54 @@ Réponds toujours en français, de façon concise et élégante."""
     async def _detect_mode(self, query: str) -> Optional[str]:
         """Détecte le meilleur mode Jarvis pour la requête (Invisible Switching)."""
         q = query.lower()
-        if any(word in q for word in ["code", "python", "script", "erreur", "bug", "fonction"]):
+        if any(word in q for word in ["code", "python", "script", "erreur", "bug", "fonction", "algorithme"]):
             return "Coder"
         if any(word in q for word in ["analyse", "données", "chiffres", "comparaison", "marché"]):
             return "Analyst"
-        if any(word in q for word in ["crée", "invente", "écris", "poème", "histoire", "idée"]):
+        if any(word in q for word in ["crèe", "invente", "écris", "poème", "histoire", "idée"]):
             return "Creative"
         if any(word in q for word in ["rendez-vous", "réserve", "organise", "rappel", "email", "calendrier"]):
             return "Concierge"
         return None
+
+    def _detect_context_from_location(self, lat: Optional[float], lng: Optional[float]) -> str:
+        """Détecte le contexte de localisation et suggère une adaptation de comportement."""
+        if not lat or not lng:
+            return ""
+        # Zones connues de l'utilisateur (simplifié - à enrichir avec de vraies coordonnées)
+        # On détecte le contexte via des séries de mots-clés géographiques généraux
+        context_hint = []
+        # France métropolitaine (zone générale)
+        if 41.0 <= lat <= 51.5 and -5.5 <= lng <= 9.6:
+            context_hint.append("en France métropolitaine")
+        # Paris et Ile-de-France
+        if 48.1 <= lat <= 49.2 and 1.4 <= lng <= 3.6:
+            context_hint.append("en région parisienne")
+        # Nord de la France (Lille/Tourcoing)
+        elif 50.2 <= lat <= 51.1 and 2.5 <= lng <= 4.0:
+            context_hint.append("dans le Nord (Lille/Tourcoing)")
+
+        if context_hint:
+            return f"\n📍 CONTEXTE SPATIAL : L'utilisateur est {', '.join(context_hint)}."
+        return ""
+
+    def _analyze_sentiment(self, query: str) -> str:
+        """Détecte le ton émotionnel du message pour adapter la réponse."""
+        q = query.lower()
+        # Indicateurs de stress/urgence
+        stress_words = ["urgent", "vite", "très important", "sos", "help", "problème", "catastrophe", "merde", "nul", "impossible", "!!", "??"]
+        # Indicateurs de fatigue
+        fatigue_words = ["fatigué", "crevé", "j'en peux plus", "flemme", "découragé", "pas la forme", "déprim"]
+        # Indicateurs d'enthousiasme
+        enthusiasm_words = ["super", "génial", "top", "incroyable", "parfait", "cool", "j'adore", "excellent", "à fond", "motiv"]
+
+        if any(w in q for w in stress_words):
+            return "\n💚 TON ADAPTÉ : L'utilisateur semble stressé ou pressé. Sois concis, direct et rassurant. Prioritise l'action."
+        elif any(w in q for w in fatigue_words):
+            return "\n😴 TON ADAPTÉ : L'utilisateur semble fatigué. Adopte un ton doux et encourageant. Propose de gérer les choses pour lui."
+        elif any(w in q for w in enthusiasm_words):
+            return "\n⚡ TON ADAPTÉ : L'utilisateur est enthousiaste. Partage son énergie, sois dynamique et engage-toi dans le brainstorming."
+        return ""
 
     async def process_query(self, prompt: str, google_token: Optional[str] = None, user_name: str = "Antoine", lat: Optional[float] = None, lng: Optional[float] = None, thread_id: str = "main", save_to_history: bool = True, mode: Optional[str] = None, image_base64: Optional[str] = None) -> str:
         # 0. Détection automatique du mode si non spécifié
@@ -237,11 +289,15 @@ Réponds toujours en français, de façon concise et élégante."""
         
         context_parts = [f"Date actuelle: {date_str}"]
         if lat and lng:
-            context_parts.append(f"Position actuelle: {lat}, {lng}")
+            context_parts.append(f"Position GPS précise: {lat:.4f}, {lng:.4f}")
         if relevant_facts:
-            context_parts.append("Souvenirs: " + " | ".join(relevant_facts))
+            context_parts.append("Souvenirs pertinents: " + " | ".join(relevant_facts))
+        
+        # Enrichissements contextuels
+        geo_context = self._detect_context_from_location(lat, lng)
+        sentiment_hint = self._analyze_sentiment(prompt)
             
-        enriched_prompt = f"[CONTEXTE : {', '.join(context_parts)}]\n\n{prompt}"
+        enriched_prompt = f"[CONTEXTE : {', '.join(context_parts)}]{geo_context}{sentiment_hint}\n\n{prompt}"
 
 
         # Construction du message avec image si présente

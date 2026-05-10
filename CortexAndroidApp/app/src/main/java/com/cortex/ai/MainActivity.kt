@@ -7,34 +7,29 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.Location
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
-import android.location.Location
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationServices
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.animation.core.*
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.draw.blur
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -49,29 +44,32 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-
 import androidx.work.*
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.util.concurrent.TimeUnit
@@ -89,7 +87,8 @@ class MainActivity : ComponentActivity() {
     private var updateLocation: ((Double, Double) -> Unit)? = null
 
     private val requestPermissionLauncher =
-            registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+            registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+                    permissions ->
                 val allGranted = permissions.entries.all { it.value }
                 if (allGranted) {
                     requestLocation()
@@ -99,28 +98,55 @@ class MainActivity : ComponentActivity() {
             }
 
     private fun requestLocation() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            // Utilisation de getCurrentLocation pour forcer une position fraîche
-            val task = fusedLocationClient.getCurrentLocation(
-                com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY,
-                null
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+                        PackageManager.PERMISSION_GRANTED
+        ) {
+            // LocationRequest pour des mises à jour périodiques fraîches
+            val locationRequest =
+                    com.google.android.gms.location.LocationRequest.Builder(
+                                    com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY,
+                                    30000L // toutes les 30 secondes
+                            )
+                            .setMinUpdateIntervalMillis(10000L)
+                            .build()
+
+            val locationCallback =
+                    object : com.google.android.gms.location.LocationCallback() {
+                        override fun onLocationResult(
+                                result: com.google.android.gms.location.LocationResult
+                        ) {
+                            val location = result.lastLocation ?: return
+                            Log.d(
+                                    "CortexGPS",
+                                    "Position mise à jour: ${location.latitude}, ${location.longitude} (précision: ${location.accuracy}m)"
+                            )
+                            updateLocation?.invoke(location.latitude, location.longitude)
+                        }
+                    }
+            fusedLocationClient.requestLocationUpdates(
+                    locationRequest,
+                    locationCallback,
+                    android.os.Looper.getMainLooper()
             )
-            task.addOnSuccessListener { location: Location? ->
+            // Aussi récupérer la dernière position connue immédiatement
+            fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
                 if (location != null) {
-                    Log.d("CortexGPS", "Position fraîche reçue: ${location.latitude}, ${location.longitude}")
+                    Log.d(
+                            "CortexGPS",
+                            "Dernière position connue: ${location.latitude}, ${location.longitude}"
+                    )
                     updateLocation?.invoke(location.latitude, location.longitude)
-                } else {
-                    Log.e("CortexGPS", "Impossible de récupérer la position actuelle (null)")
                 }
             }
-            task.addOnFailureListener { e ->
-                Log.e("CortexGPS", "Échec requête GPS: ${e.message}")
-            }
         } else {
-            requestPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
+            requestPermissionLauncher.launch(
+                    arrayOf(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
+            )
         }
     }
-
 
     private val googleSignInLauncher =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -140,16 +166,16 @@ class MainActivity : ComponentActivity() {
             }
 
     private var onAuthSuccess: ((String) -> Unit)? = null
-    
-    private val imagePickerLauncher = 
-        registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-            uri?.let { onImageSelected?.invoke(it) }
-        }
+
+    private val imagePickerLauncher =
+            registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+                uri?.let { onImageSelected?.invoke(it) }
+            }
     private var onImageSelected: ((Uri) -> Unit)? = null
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        setIntent(intent) 
+        setIntent(intent)
         // Si l'intent contient une notification, on peut déclencher un rafraîchissement
         intent?.getStringExtra("notif_title")?.let { title ->
             intent.getStringExtra("notif_message")?.let { message ->
@@ -161,28 +187,31 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        val lastAccount = GoogleSignIn.getLastSignedInAccount(this)
         requestLocation()
-        
+
         // Activation de l'anticipation proactive
         toggleAnticipationWorker(true)
 
         // Demande de permission notification et audio pour Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val permissions = arrayOf(
-                Manifest.permission.POST_NOTIFICATIONS,
-                Manifest.permission.RECORD_AUDIO
-            )
-            val needed = permissions.filter { 
-                ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED 
-            }
+            val permissions =
+                    arrayOf(
+                            Manifest.permission.POST_NOTIFICATIONS,
+                            Manifest.permission.RECORD_AUDIO
+                    )
+            val needed =
+                    permissions.filter {
+                        ContextCompat.checkSelfPermission(this, it) !=
+                                PackageManager.PERMISSION_GRANTED
+                    }
             if (needed.isNotEmpty()) {
                 requestPermissionLauncher.launch(needed.toTypedArray())
             }
         }
 
-        
         val iaPrioriseur = MlpPrioriseur()
 
         val prefs = getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
@@ -190,7 +219,9 @@ class MainActivity : ComponentActivity() {
                 prefs.getString("theme_mode", ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name
         val briefingEnabled = prefs.getBoolean("briefing_enabled", false)
 
-        val chatHistory = prefs.getString("chat_history", null)
+        val chatHistory = prefs.getString("chat_history_${lastAccount?.id ?: "default"}", null)
+        val defaultGreeting =
+                "Bonjour ${lastAccount?.displayName?.split(" ")?.firstOrNull() ?: "Antoine"}. Les systèmes sont en ligne."
         val initialMessages =
                 if (chatHistory != null) {
                     try {
@@ -199,9 +230,9 @@ class MainActivity : ComponentActivity() {
                                         object : TypeToken<List<JarvisChatMessage>>() {}.type
                                 )
                     } catch (e: Exception) {
-                        listOf(JarvisChatMessage("Bonjour Antoine. Les systèmes sont en ligne.", false))
+                        listOf(JarvisChatMessage(defaultGreeting, false))
                     }
-                } else listOf(JarvisChatMessage("Bonjour Antoine. Les systèmes sont en ligne.", false))
+                } else listOf(JarvisChatMessage(defaultGreeting, false))
 
         val savedTasks = prefs.getString("prioritized_tasks", null)
         val initialTasks =
@@ -216,7 +247,6 @@ class MainActivity : ComponentActivity() {
                     }
                 } else listOf<TaskItem>()
 
-        val lastAccount = GoogleSignIn.getLastSignedInAccount(this)
 
         setContent {
             val context = androidx.compose.ui.platform.LocalContext.current
@@ -225,25 +255,27 @@ class MainActivity : ComponentActivity() {
             var JarvisChatMessages by remember { mutableStateOf(initialMessages) }
             var prioritizedTasks by remember { mutableStateOf(initialTasks) }
             var googleAccount by remember { mutableStateOf(lastAccount) }
-            val currentUserId = remember(googleAccount) {
-                googleAccount?.displayName?.lowercase()?.replace(" ", "_") ?: "antoine"
-            }
-            var activeNotification by remember {
-                mutableStateOf<JarvisNotification?>(null)
-            }
+            val currentUserId =
+                    remember(googleAccount) {
+                        googleAccount?.displayName?.lowercase()?.replace(" ", "_") ?: "antoine"
+                    }
+            val currentUserName =
+                    remember(googleAccount) {
+                        googleAccount?.displayName?.split(" ")?.firstOrNull() ?: "Antoine"
+                    }
+            var activeNotification by remember { mutableStateOf<JarvisNotification?>(null) }
             val coroutineScope = rememberCoroutineScope()
             val onPickImage: ((Uri) -> Unit) -> Unit = { callback ->
                 onImageSelected = callback
                 imagePickerLauncher.launch("image/*")
             }
-            
+
             // Heure du briefing
             val savedHour = prefs.getInt("briefing_hour", 8)
             val savedMinute = prefs.getInt("briefing_minute", 0)
             var briefingHour by remember { mutableStateOf(savedHour) }
             var briefingMinute by remember { mutableStateOf(savedMinute) }
             var isMemoryExplorerOpen by remember { mutableStateOf(false) }
-
 
             // Surveillance des changements d'Intent pour afficher les notifications cliquées
             LaunchedEffect(intent) {
@@ -256,10 +288,10 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-            
+
             var currentLatitude by remember { mutableStateOf<Double?>(null) }
             var currentLongitude by remember { mutableStateOf<Double?>(null) }
-            
+
             // --- Synchronisation des Tâches avec Supabase ---
             LaunchedEffect(googleAccount) {
                 try {
@@ -274,25 +306,36 @@ class MainActivity : ComponentActivity() {
                 currentLatitude = lat
                 currentLongitude = lng
             }
-            
-            var isAutoReadEnabled by remember { mutableStateOf(prefs.getBoolean("auto_read_enabled", false)) }
-            
+
+            var isAutoReadEnabled by remember {
+                mutableStateOf(prefs.getBoolean("auto_read_enabled", false))
+            }
+
             // Polling des notifications proactives
             LaunchedEffect(googleAccount) {
                 while (true) {
                     try {
-                        val notifResponse = JarvisApiClient.apiService.getNotifications(currentUserId)
+                        val notifResponse =
+                                JarvisApiClient.apiService.getNotifications(currentUserId)
 
                         val notifs = notifResponse.notifications
                         if (notifs.isNotEmpty()) {
                             notifs.forEach { notif ->
-                                showNativeNotification(this@MainActivity, notif.title, notif.message)
+                                showNativeNotification(
+                                        this@MainActivity,
+                                        notif.title,
+                                        notif.message
+                                )
                                 // Ajout automatique à la discussion
-                                val chatNotif = JarvisChatMessage(text = "🔔 **${notif.title}**\n${notif.message}", isUser = false, isError = false)
+                                val chatNotif =
+                                        JarvisChatMessage(
+                                                text = "🔔 **${notif.title}**\n${notif.message}",
+                                                isUser = false,
+                                                isError = false
+                                        )
                                 JarvisChatMessages = JarvisChatMessages + chatNotif
                             }
                             JarvisApiClient.apiService.clearNotifications(currentUserId)
-
                         }
                     } catch (e: Exception) {
                         Log.e("JarvisPolling", "Erreur polling: ${e.message}")
@@ -362,6 +405,7 @@ class MainActivity : ComponentActivity() {
                             prioritizedTasks = prioritizedTasks,
                             googleAccount = googleAccount,
                             currentUserId = currentUserId,
+                            currentUserName = currentUserName,
                             lat = currentLatitude,
                             lng = currentLongitude,
                             onThemeChange = {
@@ -377,34 +421,50 @@ class MainActivity : ComponentActivity() {
                                     toggleBriefingWorker(false)
                                 }
                             },
-
                             onMessagesChange = {
                                 JarvisChatMessages = it
-                                prefs.edit().putString("chat_history", Gson().toJson(it)).apply()
+                                prefs.edit()
+                                        .putString(
+                                                "chat_history_${currentUserId}",
+                                                Gson().toJson(it)
+                                        )
+                                        .apply()
                             },
                             onTasksChange = { newList ->
                                 val oldList = prioritizedTasks
                                 prioritizedTasks = newList
-                                prefs.edit().putString("prioritized_tasks", Gson().toJson(newList)).apply()
-                                
+                                prefs.edit()
+                                        .putString("prioritized_tasks", Gson().toJson(newList))
+                                        .apply()
+
                                 coroutineScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                     try {
                                         if (newList.size < oldList.size) {
-                                            val deletedTask = oldList.find { old -> newList.none { it.name == old.name } }
+                                            val deletedTask =
+                                                    oldList.find { old ->
+                                                        newList.none { it.name == old.name }
+                                                    }
                                             deletedTask?.let { task ->
-                                                JarvisApiClient.apiService.deleteTask(currentUserId, mapOf(
-                                                    "id" to task.id,
-                                                    "name" to task.name
-                                                ))
+                                                JarvisApiClient.apiService.deleteTask(
+                                                        currentUserId,
+                                                        mapOf("id" to task.id, "name" to task.name)
+                                                )
                                             }
                                         } else if (newList.size > oldList.size) {
                                             newList.lastOrNull()?.let { task ->
-                                                JarvisApiClient.apiService.addTask(currentUserId, TaskRequest(
-                                                    name = task.name ?: "Sans titre",
-                                                    urgency = 5, importance = 5, duration = 5, envy = 5, energy = 5,
-                                                    score = task.score ?: 0.0,
-                                                    status = task.status ?: "pending"
-                                                ))
+                                                JarvisApiClient.apiService.addTask(
+                                                        currentUserId,
+                                                        TaskRequest(
+                                                                name = task.name ?: "Sans titre",
+                                                                urgency = 5,
+                                                                importance = 5,
+                                                                duration = 5,
+                                                                envy = 5,
+                                                                energy = 5,
+                                                                score = task.score ?: 0.0,
+                                                                status = task.status ?: "pending"
+                                                        )
+                                                )
                                             }
                                         }
                                     } catch (e: Exception) {
@@ -420,7 +480,10 @@ class MainActivity : ComponentActivity() {
                             briefingHour = briefingHour,
                             briefingMinute = briefingMinute,
                             onBriefingTimeChange = { h, m ->
-                                prefs.edit().putInt("briefing_hour", h).putInt("briefing_minute", m).apply()
+                                prefs.edit()
+                                        .putInt("briefing_hour", h)
+                                        .putInt("briefing_minute", m)
+                                        .apply()
                                 briefingHour = h
                                 briefingMinute = m
                                 if (isBriefingEnabled) {
@@ -431,15 +494,12 @@ class MainActivity : ComponentActivity() {
                             isMemoryExplorerOpen = isMemoryExplorerOpen,
                             onMemoryExplorerToggle = { isMemoryExplorerOpen = it },
                             isAutoReadEnabled = isAutoReadEnabled,
-                            onAutoReadToggle = { 
+                            onAutoReadToggle = {
                                 isAutoReadEnabled = it
                                 prefs.edit().putBoolean("auto_read_enabled", it).apply()
                             },
                             onPickImage = onPickImage
                     )
-
-
-
                 }
             }
         }
@@ -531,17 +591,17 @@ class MainActivity : ComponentActivity() {
         if (enabled) {
             val calendar = java.util.Calendar.getInstance()
             val now = calendar.timeInMillis
-            
+
             calendar.set(java.util.Calendar.HOUR_OF_DAY, hour)
             calendar.set(java.util.Calendar.MINUTE, minute)
             calendar.set(java.util.Calendar.SECOND, 0)
-            
+
             if (calendar.timeInMillis <= now) {
                 calendar.add(java.util.Calendar.DAY_OF_YEAR, 1)
             }
-            
+
             val delay = calendar.timeInMillis - now
-            
+
             val briefingRequest =
                     PeriodicWorkRequestBuilder<BriefingWorker>(24, TimeUnit.HOURS)
                             .setInitialDelay(delay, TimeUnit.MILLISECONDS)
@@ -552,7 +612,10 @@ class MainActivity : ComponentActivity() {
                     ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE,
                     briefingRequest
             )
-            Log.d("JarvisBriefing", "Briefing programmé à ${hour}h${minute} (Délai: ${delay/60000} min)")
+            Log.d(
+                    "JarvisBriefing",
+                    "Briefing programmé à ${hour}h${minute} (Délai: ${delay/60000} min)"
+            )
         } else {
             workManager.cancelUniqueWork("morning_briefing")
         }
@@ -560,13 +623,16 @@ class MainActivity : ComponentActivity() {
 
     private fun triggerImpromptuBriefing() {
         val workManager = WorkManager.getInstance(this)
-        val immediateRequest = OneTimeWorkRequestBuilder<BriefingWorker>()
-            .addTag("impromptu_briefing")
-            .build()
+        val immediateRequest =
+                OneTimeWorkRequestBuilder<BriefingWorker>().addTag("impromptu_briefing").build()
         workManager.enqueue(immediateRequest)
-        android.widget.Toast.makeText(this, "⚡ Jarvis prépare ton briefing impromptu...", android.widget.Toast.LENGTH_SHORT).show()
+        android.widget.Toast.makeText(
+                        this,
+                        "⚡ Jarvis prépare ton briefing impromptu...",
+                        android.widget.Toast.LENGTH_SHORT
+                )
+                .show()
     }
-
 
     private fun toggleAnticipationWorker(enabled: Boolean) {
         val workManager = WorkManager.getInstance(this)
@@ -613,7 +679,7 @@ class MainActivity : ComponentActivity() {
                     Log.e("CortexAuth", "Erreur refresh token: ${e.message}")
                     null
                 }
-    }
+            }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -626,6 +692,7 @@ fun MainScreen(
         prioritizedTasks: List<TaskItem>,
         googleAccount: GoogleSignInAccount?,
         currentUserId: String,
+        currentUserName: String,
         lat: Double?,
         lng: Double?,
         onThemeChange: (ThemeMode) -> Unit,
@@ -647,7 +714,6 @@ fun MainScreen(
         onAutoReadToggle: (Boolean) -> Unit,
         onPickImage: ((Uri) -> Unit) -> Unit
 ) {
-
 
     val scope = rememberCoroutineScope()
 
@@ -679,14 +745,14 @@ fun MainScreen(
     }
 
     var updateUrl by remember { mutableStateOf<String?>(null) }
-    
+
     // Vérification des mises à jour au démarrage
     LaunchedEffect(Unit) {
         try {
             val release = JarvisApiClient.githubService.getLatestRelease()
             val latestVersion = release.tag_name.replace("v", "")
             val currentVersion = BuildConfig.VERSION_NAME
-            
+
             if (latestVersion != currentVersion) {
                 updateUrl = release.html_url
             }
@@ -697,156 +763,194 @@ fun MainScreen(
 
     if (updateUrl != null) {
         AlertDialog(
-            onDismissRequest = { updateUrl = null },
-            title = { Text("Mise à jour disponible 🎉") },
-            text = { Text("Une nouvelle version de Cortex AI est disponible sur GitHub !") },
-
-            confirmButton = {
-                Button(
-                    onClick = {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(updateUrl)))
-                        updateUrl = null
-                    }
-                ) { Text("Mettre à jour") }
-            },
-            dismissButton = {
-                TextButton(onClick = { updateUrl = null }) { Text("Plus tard") }
-            }
+                onDismissRequest = { updateUrl = null },
+                title = { Text("Mise à jour disponible 🎉") },
+                text = { Text("Une nouvelle version de Cortex AI est disponible sur GitHub !") },
+                confirmButton = {
+                    Button(
+                            onClick = {
+                                context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse(updateUrl))
+                                )
+                                updateUrl = null
+                            }
+                    ) { Text("Mettre à jour") }
+                },
+                dismissButton = { TextButton(onClick = { updateUrl = null }) { Text("Plus tard") } }
         )
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize()
-    ) { _ ->
+    Scaffold(modifier = Modifier.fillMaxSize()) { _ ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = if (isSystemInDarkTheme())
-                            listOf(Color(0xFF0F111A), Color(0xFF1A1D2E))
-                        else
-                            listOf(Color(0xFFF9FAFB), Color(0xFFF3F4F6))
-                    )
-                )
+                modifier =
+                        Modifier.fillMaxSize()
+                                .background(
+                                        Brush.verticalGradient(
+                                                colors =
+                                                        if (isSystemInDarkTheme())
+                                                                listOf(
+                                                                        Color(0xFF0F111A),
+                                                                        Color(0xFF1A1D2E)
+                                                                )
+                                                        else
+                                                                listOf(
+                                                                        Color(0xFFF9FAFB),
+                                                                        Color(0xFFF3F4F6)
+                                                                )
+                                        )
+                                )
         ) {
             // Contenu Principal avec Crossfade
             Crossfade(
-                targetState = selectedTab, 
-                animationSpec = tween(400),
-                modifier = Modifier.padding(bottom = 88.dp) // Espace pour le dock
+                    targetState = selectedTab,
+                    animationSpec = tween(400),
+                    modifier = Modifier.padding(bottom = 88.dp) // Espace pour le dock
             ) { tab ->
                 when (tab) {
-                    0 -> PrioritizerScreen(iaPrioriseur, prioritizedTasks, onTasksChange, onImpromptuBriefing)
-                    1 -> JarvisScreen(JarvisChatMessages, googleAccount, currentUserId, lat, lng, onMessagesChange, onRefreshToken, isAutoReadEnabled, onAutoReadToggle, onPickImage)
-
-                    2 -> SettingsScreen(
-                        themeMode,
-                        isBriefingEnabled,
-                        googleAccount,
-                        onThemeChange,
-                        onBriefingToggle,
-                        onGoogleSignIn,
-                        onGoogleSignOut,
-                        onRequestNotifPermission,
-                        onRequestNotifAccess,
-                        briefingHour,
-                        briefingMinute,
-                        onBriefingTimeChange = onBriefingTimeChange,
-                        onExploreMemory = { onMemoryExplorerToggle(true) }
-                    )
+                    0 ->
+                            PrioritizerScreen(
+                                    iaPrioriseur,
+                                    prioritizedTasks,
+                                    onTasksChange,
+                                    onImpromptuBriefing
+                            )
+                    1 ->
+                            JarvisScreen(
+                                    JarvisChatMessages,
+                                    googleAccount,
+                                    currentUserId,
+                                    currentUserName,
+                                    lat,
+                                    lng,
+                                    onMessagesChange,
+                                    onRefreshToken,
+                                    isAutoReadEnabled,
+                                    onAutoReadToggle,
+                                    onPickImage
+                            )
+                    2 ->
+                            SettingsScreen(
+                                    themeMode,
+                                    isBriefingEnabled,
+                                    googleAccount,
+                                    onThemeChange,
+                                    onBriefingToggle,
+                                    onGoogleSignIn,
+                                    onGoogleSignOut,
+                                    onRequestNotifPermission,
+                                    onRequestNotifAccess,
+                                    briefingHour,
+                                    briefingMinute,
+                                    onBriefingTimeChange = onBriefingTimeChange,
+                                    onExploreMemory = { onMemoryExplorerToggle(true) }
+                            )
                 }
             }
 
             // Écran d'exploration de mémoire (Overlay)
             if (isMemoryExplorerOpen) {
                 MemoryExplorerScreen(
-                    currentUserId = currentUserId,
-                    onDismiss = { onMemoryExplorerToggle(false) },
-                    onDeleteFact = { fact ->
-                        scope.launch {
-                            try {
-                                JarvisApiClient.apiService.deleteMemoryFact(DeleteMemoryRequest(fact, currentUserId))
-                            } catch (e: Exception) {
-                                Log.e("MemoryDelete", "Error: ${e.message}")
+                        currentUserId = currentUserId,
+                        onDismiss = { onMemoryExplorerToggle(false) },
+                        onDeleteFact = { fact ->
+                            scope.launch {
+                                try {
+                                    JarvisApiClient.apiService.deleteMemoryFact(
+                                            DeleteMemoryRequest(fact, currentUserId)
+                                    )
+                                } catch (e: Exception) {
+                                    Log.e("MemoryDelete", "Error: ${e.message}")
+                                }
                             }
                         }
-                    }
                 )
             }
 
             // Écran de détail de notification (Overlay)
             activeNotification?.let { notif ->
                 NotificationDetailScreen(
-                    notification = notif,
-                    onDismiss = { activeNotification = null }
+                        notification = notif,
+                        onDismiss = { activeNotification = null }
                 )
             }
 
             // --- DOCK FLOTTANT PREMIUM ---
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter)
-                    .padding(horizontal = 24.dp, vertical = 20.dp)
-                    .navigationBarsPadding()
+                    modifier =
+                            Modifier.fillMaxWidth()
+                                    .align(Alignment.BottomCenter)
+                                    .padding(horizontal = 24.dp, vertical = 20.dp)
+                                    .navigationBarsPadding()
             ) {
                 Surface(
-                    modifier = Modifier.fillMaxWidth().height(72.dp),
-                    shape = RoundedCornerShape(36.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-                    tonalElevation = 8.dp,
-                    shadowElevation = 16.dp,
-                    border = androidx.compose.foundation.BorderStroke(0.5.dp, Color.Gray.copy(alpha = 0.1f))
+                        modifier = Modifier.fillMaxWidth().height(72.dp),
+                        shape = RoundedCornerShape(36.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                        tonalElevation = 8.dp,
+                        shadowElevation = 16.dp,
+                        border =
+                                androidx.compose.foundation.BorderStroke(
+                                        0.5.dp,
+                                        Color.Gray.copy(alpha = 0.1f)
+                                )
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
                     ) {
                         val navItems = listOf("Focus", "Jarvis", "Profil")
                         val navIcons = listOf("🧠", "🤖", "⚙️")
-                        
+
                         navItems.forEachIndexed { index, label ->
                             val isSelected = selectedTab == index
-                            val color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray
-                            
+                            val color =
+                                    if (isSelected) MaterialTheme.colorScheme.primary
+                                    else Color.Gray
+
                             Column(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable(
-                                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                        indication = null,
-                                        onClick = { selectedTab = index }
-                                    ),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
+                                    modifier =
+                                            Modifier.weight(1f)
+                                                    .clickable(
+                                                            interactionSource =
+                                                                    remember {
+                                                                        androidx.compose.foundation
+                                                                                .interaction
+                                                                                .MutableInteractionSource()
+                                                                    },
+                                                            indication = null,
+                                                            onClick = { selectedTab = index }
+                                                    ),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
                             ) {
                                 // Petit point indicateur actif
                                 androidx.compose.animation.AnimatedVisibility(
-                                    visible = isSelected,
-                                    enter = fadeIn() + expandVertically(),
-                                    exit = fadeOut() + shrinkVertically()
+                                        visible = isSelected,
+                                        enter = fadeIn() + expandVertically(),
+                                        exit = fadeOut() + shrinkVertically()
                                 ) {
                                     Box(
-                                        modifier = Modifier
-                                            .size(width = 20.dp, height = 3.dp)
-                                            .background(color, RoundedCornerShape(2.dp))
+                                            modifier =
+                                                    Modifier.size(width = 20.dp, height = 3.dp)
+                                                            .background(
+                                                                    color,
+                                                                    RoundedCornerShape(2.dp)
+                                                            )
                                     )
                                 }
-                                
+
                                 Spacer(modifier = Modifier.height(4.dp))
-                                
+
+                                Text(navIcons[index], fontSize = if (isSelected) 22.sp else 20.sp)
+
                                 Text(
-                                    navIcons[index], 
-                                    fontSize = if (isSelected) 22.sp else 20.sp
-                                )
-                                
-                                Text(
-                                    label, 
-                                    fontSize = 11.sp, 
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = color
+                                        label,
+                                        fontSize = 11.sp,
+                                        fontWeight =
+                                                if (isSelected) FontWeight.Bold
+                                                else FontWeight.Medium,
+                                        color = color
                                 )
                             }
                         }
@@ -857,60 +961,51 @@ fun MainScreen(
     }
 }
 
-
-
 @Composable
-fun NotificationDetailScreen(
-    notification: JarvisNotification,
-    onDismiss: () -> Unit
-) {
+fun NotificationDetailScreen(notification: JarvisNotification, onDismiss: () -> Unit) {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.9f))
-            .clickable(onClick = onDismiss),
-        contentAlignment = Alignment.Center
+            modifier =
+                    Modifier.fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.9f))
+                            .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
     ) {
         Surface(
-            modifier = Modifier
-                .fillMaxWidth(0.85f)
-                .padding(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(24.dp),
-            tonalElevation = 8.dp
+                modifier = Modifier.fillMaxWidth(0.85f).padding(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(24.dp),
+                tonalElevation = 8.dp
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    "🤖 Jarvis vous informe",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
+                        "🤖 Jarvis vous informe",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    notification.title,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    textAlign = TextAlign.Center
+                        notification.title,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    notification.message,
-                    fontSize = 16.sp,
-                    lineHeight = 24.sp,
-                    textAlign = TextAlign.Center
+                        notification.message,
+                        fontSize = 16.sp,
+                        lineHeight = 24.sp,
+                        textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(32.dp))
                 Button(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Compris, merci Jarvis")
-                }
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                ) { Text("Compris, merci Jarvis") }
             }
         }
     }
@@ -918,39 +1013,51 @@ fun NotificationDetailScreen(
 
 private fun showNativeNotification(context: Context, title: String, message: String) {
     val channelId = "jarvis_notifications"
-    val intent = Intent(context, MainActivity::class.java).apply {
-        flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        putExtra("notif_title", title)
-        putExtra("notif_message", message)
-    }
+    val intent =
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra("notif_title", title)
+                putExtra("notif_message", message)
+            }
 
-    val pendingIntent = PendingIntent.getActivity(
-        context, 0, intent,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
+    val pendingIntent =
+            PendingIntent.getActivity(
+                    context,
+                    0,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
 
-    val notification = androidx.core.app.NotificationCompat.Builder(context, channelId)
-        .setSmallIcon(R.mipmap.ic_launcher)
-        .setContentTitle(title)
-        .setContentText(message)
-        .setStyle(androidx.core.app.NotificationCompat.BigTextStyle()
-            .bigText(message)
-            .setBigContentTitle(title)
-            .setSummaryText("Alerte Jarvis"))
-        .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
-        .setCategory(androidx.core.app.NotificationCompat.CATEGORY_EVENT)
-        .setContentIntent(pendingIntent)
-        .setAutoCancel(true)
-        .build()
+    val notification =
+            androidx.core.app.NotificationCompat.Builder(context, channelId)
+                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setContentTitle(title)
+                    .setContentText(message)
+                    .setStyle(
+                            androidx.core.app.NotificationCompat.BigTextStyle()
+                                    .bigText(message)
+                                    .setBigContentTitle(title)
+                                    .setSummaryText("Alerte Jarvis")
+                    )
+                    .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+                    .setCategory(androidx.core.app.NotificationCompat.CATEGORY_EVENT)
+                    .setContentIntent(pendingIntent)
+                    .setAutoCancel(true)
+                    .build()
 
+    val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-    val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    
     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-        val channel = NotificationChannel(channelId, "Alertes Jarvis", NotificationManager.IMPORTANCE_HIGH)
+        val channel =
+                NotificationChannel(
+                        channelId,
+                        "Alertes Jarvis",
+                        NotificationManager.IMPORTANCE_HIGH
+                )
         notificationManager.createNotificationChannel(channel)
     }
-    
+
     notificationManager.notify(System.currentTimeMillis().toInt(), notification)
 }
 
@@ -990,11 +1097,14 @@ fun PrioritizerScreen(
             }
             Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = { onImpromptuBriefing() },
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                shape = RoundedCornerShape(20.dp),
-                elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+                    onClick = { onImpromptuBriefing() },
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    colors =
+                            ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondary
+                            ),
+                    shape = RoundedCornerShape(20.dp),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("⚡", fontSize = 18.sp)
@@ -1002,9 +1112,9 @@ fun PrioritizerScreen(
                     Text("Briefing Impromptu", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(16.dp))
-            
+
             OutlinedTextField(
                     value = taskName,
                     onValueChange = { taskName = it },
@@ -1031,9 +1141,8 @@ fun PrioritizerScreen(
                                             energy.toDouble()
                                     )
                             val newList =
-                                    (tasks + TaskItem(name = taskName, score = score * 100)).sortedByDescending {
-                                        it.score ?: 0.0
-                                    }
+                                    (tasks + TaskItem(name = taskName, score = score * 100))
+                                            .sortedByDescending { it.score ?: 0.0 }
                             onTasksChange(newList)
                             taskName = ""
                         }
@@ -1052,7 +1161,8 @@ fun PrioritizerScreen(
             Text("Ma Liste de Priorités", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(modifier = Modifier.height(8.dp))
         }
-        items(tasks, key = { it.id ?: (it.name.hashCode() + (it.score ?: 0.0).hashCode()) }) { task ->
+        items(tasks, key = { it.id ?: (it.name.hashCode() + (it.score ?: 0.0).hashCode()) }) { task
+            ->
             AnimatedVisibility(
                     visible = true,
                     enter = slideInVertically() + fadeIn(),
@@ -1066,21 +1176,21 @@ fun PrioritizerScreen(
 fun SliderRow(label: String, value: Float, onValueChange: (Float) -> Unit) {
     Column(modifier = Modifier.padding(vertical = 4.dp)) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
         ) {
             Text(label, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
             Surface(
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                shape = RoundedCornerShape(8.dp)
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(8.dp)
             ) {
                 Text(
-                    value.toInt().toString(),
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp
+                        value.toInt().toString(),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
                 )
             }
         }
@@ -1089,11 +1199,13 @@ fun SliderRow(label: String, value: Float, onValueChange: (Float) -> Unit) {
                 onValueChange = onValueChange,
                 valueRange = 0f..10f,
                 steps = 9,
-                colors = SliderDefaults.colors(
-                    thumbColor = MaterialTheme.colorScheme.primary,
-                    activeTrackColor = MaterialTheme.colorScheme.primary,
-                    inactiveTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                )
+                colors =
+                        SliderDefaults.colors(
+                                thumbColor = MaterialTheme.colorScheme.primary,
+                                activeTrackColor = MaterialTheme.colorScheme.primary,
+                                inactiveTrackColor =
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                        )
         )
     }
 }
@@ -1107,13 +1219,14 @@ fun JarvisScreen(
         messages: List<JarvisChatMessage>,
         googleAccount: GoogleSignInAccount?,
         currentUserId: String,
+        currentUserName: String,
         lat: Double?,
         lng: Double?,
         onMessagesChange: (List<JarvisChatMessage>) -> Unit,
         onRefreshToken: suspend () -> String?,
         isAutoReadEnabled: Boolean,
         onAutoReadToggle: (Boolean) -> Unit,
-        onPickImage: ((Uri) -> Unit) -> Unit 
+        onPickImage: ((Uri) -> Unit) -> Unit
 ) {
     var input by remember { mutableStateOf("") }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
@@ -1129,18 +1242,11 @@ fun JarvisScreen(
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val listState = rememberLazyListState()
 
-    val voiceAssistant = remember { 
-        VoiceAssistant(context) { recognizedText ->
-            input = recognizedText
-        }
-    }
-    
-    DisposableEffect(Unit) {
-        onDispose {
-            voiceAssistant.destroy()
-        }
+    val voiceAssistant = remember {
+        VoiceAssistant(context) { recognizedText -> input = recognizedText }
     }
 
+    DisposableEffect(Unit) { onDispose { voiceAssistant.destroy() } }
 
     // --- Gestion des Threads ---
     var currentThreadId by remember { mutableStateOf("main") }
@@ -1162,7 +1268,6 @@ fun JarvisScreen(
         try {
             val response = JarvisApiClient.apiService.getThreads(currentUserId)
             threads = (response.threads + "briefing").distinct()
-
         } catch (e: Exception) {
             Log.e("JarvisThreads", "Erreur chargement threads: ${e.message}")
         }
@@ -1175,9 +1280,10 @@ fun JarvisScreen(
             val response = JarvisApiClient.apiService.getHistory(currentThreadId, currentUserId)
 
             val updated = threadMessages.toMutableMap()
-            updated[currentThreadId] = response.history.map { 
-                JarvisChatMessage(text = it.text, isUser = it.isUser, isError = false)
-            }
+            updated[currentThreadId] =
+                    response.history.map {
+                        JarvisChatMessage(text = it.text, isUser = it.isUser, isError = false)
+                    }
             threadMessages = updated
         } catch (e: Exception) {
             Log.e("JarvisHistory", "Erreur chargement historique: ${e.message}")
@@ -1186,101 +1292,137 @@ fun JarvisScreen(
         }
     }
 
-
     // Auto-scroll au dernier message
     LaunchedEffect(currentMessages.size) {
         if (currentMessages.isNotEmpty()) listState.animateScrollToItem(currentMessages.size - 1)
     }
 
-
     // Couleur d'accent dynamique : Gem > Thread > Défaut
     val gemColorHex = availableModes.find { it["name"] == currentMode }?.get("color")
-    val gemColor = if (gemColorHex != null) Color(android.graphics.Color.parseColor(gemColorHex)) else null
-    
-    val threadColor = gemColor ?: (if (currentThreadId == "main")
-        MaterialTheme.colorScheme.primary
-    else Color(0xFF9575CD))
+    val gemColor =
+            if (gemColorHex != null) Color(android.graphics.Color.parseColor(gemColorHex)) else null
+
+    val threadColor =
+            gemColor
+                    ?: (if (currentThreadId == "main") MaterialTheme.colorScheme.primary
+                    else Color(0xFF9575CD))
 
     // Dialogue de création de nouveau thread
     if (showNewThreadDialog) {
         AlertDialog(
-            onDismissRequest = { showNewThreadDialog = false },
-            shape = RoundedCornerShape(28.dp),
-            containerColor = MaterialTheme.colorScheme.surface,
-            title = { 
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                    Text("🚀 Nouveau Canal", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("Créez un espace de discussion dédié", fontSize = 12.sp, color = Color.Gray)
-                }
-            },
-            text = {
-                OutlinedTextField(
-                    value = newThreadName,
-                    onValueChange = { newThreadName = it },
-                    placeholder = { Text("Ex: Projet NSI, Sport...") },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = TextFieldDefaults.outlinedTextFieldColors(
-                        focusedBorderColor = threadColor,
-                        unfocusedBorderColor = Color.LightGray
+                onDismissRequest = { showNewThreadDialog = false },
+                shape = RoundedCornerShape(28.dp),
+                containerColor = MaterialTheme.colorScheme.surface,
+                title = {
+                    Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                                "🚀 Nouveau Canal",
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 22.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                                "Créez un espace de discussion dédié",
+                                fontSize = 12.sp,
+                                color = Color.Gray
+                        )
+                    }
+                },
+                text = {
+                    OutlinedTextField(
+                            value = newThreadName,
+                            onValueChange = { newThreadName = it },
+                            placeholder = { Text("Ex: Projet NSI, Sport...") },
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            colors =
+                                    TextFieldDefaults.outlinedTextFieldColors(
+                                            focusedBorderColor = threadColor,
+                                            unfocusedBorderColor = Color.LightGray
+                                    )
                     )
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (newThreadName.isNotBlank()) {
-                            val threadId = newThreadName.lowercase().replace(" ", "_")
-                            threads = (threads + threadId).distinct()
-                            threadMessages = threadMessages.toMutableMap().also {
-                                it[threadId] = emptyList()
-                            }
-                            currentThreadId = threadId
-                            newThreadName = ""
-                            showNewThreadDialog = false
-                            showSidebar = false
-                        }
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = threadColor)
-                ) { Text("Créer l'espace", fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNewThreadDialog = false }) { Text("Plus tard", color = Color.Gray) }
-            }
+                },
+                confirmButton = {
+                    Button(
+                            onClick = {
+                                if (newThreadName.isNotBlank()) {
+                                    val threadId = newThreadName.lowercase().replace(" ", "_")
+                                    threads = (threads + threadId).distinct()
+                                    threadMessages =
+                                            threadMessages.toMutableMap().also {
+                                                it[threadId] = emptyList()
+                                            }
+                                    currentThreadId = threadId
+                                    newThreadName = ""
+                                    showNewThreadDialog = false
+                                    showSidebar = false
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = threadColor)
+                    ) { Text("Créer l'espace", fontWeight = FontWeight.Bold) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showNewThreadDialog = false }) {
+                        Text("Plus tard", color = Color.Gray)
+                    }
+                }
         )
     }
 
-
     // --- Animation d'arrière-plan dynamique ---
     val infiniteTransition = rememberInfiniteTransition()
-    val backgroundOffset by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1000f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(40000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        )
-    )
+    val backgroundOffset by
+            infiniteTransition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = 1000f,
+                    animationSpec =
+                            infiniteRepeatable(
+                                    animation = tween(40000, easing = LinearEasing),
+                                    repeatMode = RepeatMode.Reverse
+                            )
+            )
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         // Arrière-plan avec dégradé animé (Plus visible)
         Canvas(modifier = Modifier.fillMaxSize()) {
             drawRect(
-                brush = Brush.radialGradient(
-                    colors = listOf(threadColor.copy(alpha = 0.15f), Color.Transparent),
-                    center = androidx.compose.ui.geometry.Offset(backgroundOffset % size.width, (backgroundOffset * 0.7f) % size.height),
-                    radius = size.width * 1.5f
-                )
+                    brush =
+                            Brush.radialGradient(
+                                    colors =
+                                            listOf(
+                                                    threadColor.copy(alpha = 0.15f),
+                                                    Color.Transparent
+                                            ),
+                                    center =
+                                            androidx.compose.ui.geometry.Offset(
+                                                    backgroundOffset % size.width,
+                                                    (backgroundOffset * 0.7f) % size.height
+                                            ),
+                                    radius = size.width * 1.5f
+                            )
             )
             drawRect(
-                brush = Brush.radialGradient(
-                    colors = listOf(threadColor.copy(alpha = 0.12f), Color.Transparent),
-                    center = androidx.compose.ui.geometry.Offset(size.width - (backgroundOffset % size.width), size.height - ((backgroundOffset * 0.5f) % size.height)),
-                    radius = size.width * 1.2f
-                )
+                    brush =
+                            Brush.radialGradient(
+                                    colors =
+                                            listOf(
+                                                    threadColor.copy(alpha = 0.12f),
+                                                    Color.Transparent
+                                            ),
+                                    center =
+                                            androidx.compose.ui.geometry.Offset(
+                                                    size.width - (backgroundOffset % size.width),
+                                                    size.height -
+                                                            ((backgroundOffset * 0.5f) %
+                                                                    size.height)
+                                            ),
+                                    radius = size.width * 1.2f
+                            )
             )
         }
 
@@ -1289,165 +1431,237 @@ fun JarvisScreen(
 
             // En-tête avec le nom du thread actif
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        brush = Brush.horizontalGradient(
-                            listOf(
-                                threadColor.copy(alpha = 0.15f),
-                                MaterialTheme.colorScheme.surface
-                            )
-                        )
-                    )
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    modifier =
+                            Modifier.fillMaxWidth()
+                                    .background(
+                                            brush =
+                                                    Brush.horizontalGradient(
+                                                            listOf(
+                                                                    threadColor.copy(alpha = 0.15f),
+                                                                    MaterialTheme.colorScheme
+                                                                            .surface
+                                                            )
+                                                    )
+                                    )
+                                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // Bouton sidebar
                     Surface(
-                        onClick = { showSidebar = !showSidebar },
-                        shape = RoundedCornerShape(10.dp),
-                        color = threadColor.copy(alpha = 0.15f),
-                        modifier = Modifier.size(40.dp)
+                            onClick = { showSidebar = !showSidebar },
+                            shape = RoundedCornerShape(10.dp),
+                            color = threadColor.copy(alpha = 0.15f),
+                            modifier = Modifier.size(40.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text(if (showSidebar) "✕" else "☰", fontSize = 18.sp, color = threadColor)
+                            Text(
+                                    if (showSidebar) "✕" else "☰",
+                                    fontSize = 18.sp,
+                                    color = threadColor
+                            )
                         }
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     // Titre et Description
                     Column(modifier = Modifier.padding(start = 4.dp)) {
                         Text(
-                            if (currentThreadId == "main") "JARVIS" else currentThreadId.replace("_", " ").uppercase(),
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 4.sp,
-                            color = threadColor
+                                if (currentThreadId == "main") "JARVIS"
+                                else currentThreadId.replace("_", " ").uppercase(),
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 4.sp,
+                                color = threadColor
                         )
                         Text(
-                            if (currentThreadId == "main") "Assistant IA Personnel" else "Canal spécialisé",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color.Gray,
-                            letterSpacing = 1.sp
+                                if (currentThreadId == "main") "Assistant IA Personnel"
+                                else "Canal spécialisé",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.Gray,
+                                letterSpacing = 1.sp
                         )
                     }
-
                 }
             }
 
             // Messages
             LazyColumn(
-                state = listState,
-                modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    state = listState,
+                    modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item { Spacer(modifier = Modifier.height(8.dp)) }
                 items(currentMessages) { msg ->
                     val align = if (msg.isUser) Alignment.CenterEnd else Alignment.CenterStart
-                    
+
                     // Dégradés premium pour les bulles
-                    val bubbleBrush = if (msg.isUser) {
-                        Brush.linearGradient(listOf(threadColor, threadColor.copy(alpha = 0.85f)))
-                    } else {
-                        // Effet Glassmorphism pour Jarvis (Plus marqué)
-                        Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.18f), Color.White.copy(alpha = 0.08f)))
-                    }
-                    
-                    val textColor = if (msg.isUser) Color.White else MaterialTheme.colorScheme.onSurface
+                    val bubbleBrush =
+                            if (msg.isUser) {
+                                Brush.linearGradient(
+                                        listOf(threadColor, threadColor.copy(alpha = 0.85f))
+                                )
+                            } else {
+                                // Effet Glassmorphism pour Jarvis (Plus marqué)
+                                Brush.verticalGradient(
+                                        listOf(
+                                                Color.White.copy(alpha = 0.18f),
+                                                Color.White.copy(alpha = 0.08f)
+                                        )
+                                )
+                            }
+
+                    val textColor =
+                            if (msg.isUser) Color.White else MaterialTheme.colorScheme.onSurface
 
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = align) {
                         Box(
-                            modifier = Modifier
-                                .widthIn(max = 310.dp)
-                                .padding(vertical = 2.dp)
-                                .shadow(
-                                    elevation = if (msg.isUser) 6.dp else 0.dp, 
-                                    shape = RoundedCornerShape(
-                                        topStart = 24.dp, topEnd = 24.dp,
-                                        bottomStart = if (msg.isUser) 24.dp else 4.dp,
-                                        bottomEnd = if (msg.isUser) 4.dp else 24.dp
-                                    )
-                                )
-                                .background(
-                                    brush = bubbleBrush,
-                                    shape = RoundedCornerShape(
-                                        topStart = 24.dp, topEnd = 24.dp,
-                                        bottomStart = if (msg.isUser) 24.dp else 4.dp,
-                                        bottomEnd = if (msg.isUser) 4.dp else 24.dp
-                                    )
-                                )
-                                .border(
-                                    width = if (msg.isUser) 0.dp else 1.dp,
-                                    brush = Brush.linearGradient(listOf(Color.White.copy(alpha = 0.3f), Color.White.copy(alpha = 0.1f))),
-                                    shape = RoundedCornerShape(
-                                        topStart = 24.dp, topEnd = 24.dp,
-                                        bottomStart = if (msg.isUser) 24.dp else 4.dp,
-                                        bottomEnd = if (msg.isUser) 4.dp else 24.dp
-                                    )
-                                )
-                                .combinedClickable(
-                                    onLongClick = {
-                                        val msgToDelete = msg
-                                        val updated = threadMessages.toMutableMap()
-                                        updated[currentThreadId] = currentMessages.filter { it != msgToDelete }
-                                        threadMessages = updated
-                                        
-                                        // Suppression persistante sur le serveur
-                                        coroutineScope.launch {
-                                            try {
-                                                JarvisApiClient.apiService.deleteMessage(currentUserId, mapOf(
-                                                    "thread_id" to currentThreadId,
-                                                    "content" to msgToDelete.text
-                                                ))
-                                            } catch (e: Exception) {
-                                                Log.e("JarvisDelete", "Erreur suppression msg: ${e.message}")
-                                            }
-                                        }
-                                    },
-                                    onClick = {}
-                                )
+                                modifier =
+                                        Modifier.widthIn(max = 310.dp)
+                                                .padding(vertical = 2.dp)
+                                                .shadow(
+                                                        elevation = if (msg.isUser) 6.dp else 0.dp,
+                                                        shape =
+                                                                RoundedCornerShape(
+                                                                        topStart = 24.dp,
+                                                                        topEnd = 24.dp,
+                                                                        bottomStart =
+                                                                                if (msg.isUser)
+                                                                                        24.dp
+                                                                                else 4.dp,
+                                                                        bottomEnd =
+                                                                                if (msg.isUser) 4.dp
+                                                                                else 24.dp
+                                                                )
+                                                )
+                                                .background(
+                                                        brush = bubbleBrush,
+                                                        shape =
+                                                                RoundedCornerShape(
+                                                                        topStart = 24.dp,
+                                                                        topEnd = 24.dp,
+                                                                        bottomStart =
+                                                                                if (msg.isUser)
+                                                                                        24.dp
+                                                                                else 4.dp,
+                                                                        bottomEnd =
+                                                                                if (msg.isUser) 4.dp
+                                                                                else 24.dp
+                                                                )
+                                                )
+                                                .border(
+                                                        width = if (msg.isUser) 0.dp else 1.dp,
+                                                        brush =
+                                                                Brush.linearGradient(
+                                                                        listOf(
+                                                                                Color.White.copy(
+                                                                                        alpha = 0.3f
+                                                                                ),
+                                                                                Color.White.copy(
+                                                                                        alpha = 0.1f
+                                                                                )
+                                                                        )
+                                                                ),
+                                                        shape =
+                                                                RoundedCornerShape(
+                                                                        topStart = 24.dp,
+                                                                        topEnd = 24.dp,
+                                                                        bottomStart =
+                                                                                if (msg.isUser)
+                                                                                        24.dp
+                                                                                else 4.dp,
+                                                                        bottomEnd =
+                                                                                if (msg.isUser) 4.dp
+                                                                                else 24.dp
+                                                                )
+                                                )
+                                                .combinedClickable(
+                                                        onLongClick = {
+                                                            val msgToDelete = msg
+                                                            val updated =
+                                                                    threadMessages.toMutableMap()
+                                                            updated[currentThreadId] =
+                                                                    currentMessages.filter {
+                                                                        it != msgToDelete
+                                                                    }
+                                                            threadMessages = updated
+
+                                                            // Suppression persistante sur le
+                                                            // serveur
+                                                            coroutineScope.launch {
+                                                                try {
+                                                                    JarvisApiClient.apiService
+                                                                            .deleteMessage(
+                                                                                    currentUserId,
+                                                                                    mapOf(
+                                                                                            "thread_id" to
+                                                                                                    currentThreadId,
+                                                                                            "content" to
+                                                                                                    msgToDelete
+                                                                                                            .text
+                                                                                    )
+                                                                            )
+                                                                } catch (e: Exception) {
+                                                                    Log.e(
+                                                                            "JarvisDelete",
+                                                                            "Erreur suppression msg: ${e.message}"
+                                                                    )
+                                                                }
+                                                            }
+                                                        },
+                                                        onClick = {}
+                                                )
                         ) {
                             if (msg.isUser || !msg.isNew) {
                                 Text(
-                                    msg.text,
-                                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
-                                    color = textColor,
-                                    fontSize = 16.sp,
-                                    lineHeight = 24.sp,
-                                    fontWeight = FontWeight.Normal
+                                        msg.text,
+                                        modifier =
+                                                Modifier.padding(
+                                                        horizontal = 18.dp,
+                                                        vertical = 14.dp
+                                                ),
+                                        color = textColor,
+                                        fontSize = 16.sp,
+                                        lineHeight = 24.sp,
+                                        fontWeight = FontWeight.Normal
                                 )
                             } else {
                                 // Effet de typing pour les nouveaux messages Jarvis
                                 TypewriterText(
-                                    text = msg.text,
-                                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
-                                    color = textColor,
-                                    onComplete = {
-                                        // On marque le message comme "non nouveau" une fois fini pour éviter de rejouer l'anim au scroll
-                                        val updated = threadMessages.toMutableMap()
-                                        val currentList = updated[currentThreadId]?.toMutableList() ?: mutableListOf()
-                                        val idx = currentList.indexOf(msg)
-                                        if (idx != -1) {
-                                            currentList[idx] = msg.copy(isNew = false)
-                                            updated[currentThreadId] = currentList
-                                            threadMessages = updated
+                                        text = msg.text,
+                                        modifier =
+                                                Modifier.padding(
+                                                        horizontal = 18.dp,
+                                                        vertical = 14.dp
+                                                ),
+                                        color = textColor,
+                                        onComplete = {
+                                            // On marque le message comme "non nouveau" une fois
+                                            // fini pour éviter de rejouer l'anim au scroll
+                                            val updated = threadMessages.toMutableMap()
+                                            val currentList =
+                                                    updated[currentThreadId]?.toMutableList()
+                                                            ?: mutableListOf()
+                                            val idx = currentList.indexOf(msg)
+                                            if (idx != -1) {
+                                                currentList[idx] = msg.copy(isNew = false)
+                                                updated[currentThreadId] = currentList
+                                                threadMessages = updated
+                                            }
                                         }
-                                    }
                                 )
                             }
                         }
                     }
                 }
 
-
                 if (isLoading) {
                     item {
                         JarvisOrb(
-                            isThinking = !isModelLoading && !isModelLaunching && !isOptimizing,
-                            isToolRunning = false,
-                            isModelLoading = isModelLoading || isOptimizing,
-                            isModelLaunching = isModelLaunching,
-                            baseColor = threadColor
+                                isThinking = !isModelLoading && !isModelLaunching && !isOptimizing,
+                                isToolRunning = false,
+                                isModelLoading = isModelLoading || isOptimizing,
+                                isModelLaunching = isModelLaunching,
+                                baseColor = threadColor
                         )
                     }
                 }
@@ -1457,264 +1671,360 @@ fun JarvisScreen(
 
             // Sélecteur de modes
             var showCreateModeDialog by remember { mutableStateOf(false) }
-            
+
             fun refreshModes() {
                 coroutineScope.launch {
                     try {
                         val response = JarvisApiClient.apiService.getModes(currentUserId)
-                        availableModes = response.modes.map { mapOf(
-                            "name" to it.name,
-                            "icon" to (it.icon ?: "💎"),
-                            "color" to (it.color ?: "#4285F4")
-                        ) }
+                        availableModes =
+                                response.modes.map {
+                                    mapOf(
+                                            "name" to it.name,
+                                            "icon" to (it.icon ?: "💎"),
+                                            "color" to (it.color ?: "#4285F4")
+                                    )
+                                }
                     } catch (e: Exception) {
                         Log.e("JarvisModes", "Erreur chargement modes: ${e.message}")
                     }
                 }
-
             }
 
-            LaunchedEffect(currentUserId) {
-                refreshModes()
-            }
+            LaunchedEffect(currentUserId) { refreshModes() }
 
             if (showCreateModeDialog) {
                 CreateModeDialog(
-                    onDismiss = { showCreateModeDialog = false },
-                    onCreate = { n, i, ic, c ->
-                        coroutineScope.launch {
-                            try {
-                                JarvisApiClient.apiService.createMode(currentUserId, ModeRequest(n, i, ic, c))
+                        onDismiss = { showCreateModeDialog = false },
+                        onCreate = { n, i, ic, c ->
+                            coroutineScope.launch {
+                                try {
+                                    JarvisApiClient.apiService.createMode(
+                                            currentUserId,
+                                            ModeRequest(n, i, ic, c)
+                                    )
 
-                                showCreateModeDialog = false
-                                refreshModes()
-                            } catch (e: Exception) {
-                                Log.e("JarvisModes", "Erreur création mode: ${e.message}")
+                                    showCreateModeDialog = false
+                                    refreshModes()
+                                } catch (e: Exception) {
+                                    Log.e("JarvisModes", "Erreur création mode: ${e.message}")
+                                }
                             }
                         }
-                    }
-
                 )
             }
 
             JarvisModeSelector(
-                selectedMode = currentMode,
-                onModeSelected = { 
-                    if (it != currentMode) {
-                        currentMode = it
-                        // Petit effet visuel de chargement de modèle lors du changement de mode
-                        coroutineScope.launch {
-                            isModelLoading = true
-                            isLoading = true
-                            kotlinx.coroutines.delay(1200)
-                            isModelLoading = false
-                            isLoading = false
+                    selectedMode = currentMode,
+                    onModeSelected = {
+                        if (it != currentMode) {
+                            currentMode = it
+                            // Petit effet visuel de chargement de modèle lors du changement de mode
+                            coroutineScope.launch {
+                                isModelLoading = true
+                                isLoading = true
+                                kotlinx.coroutines.delay(1200)
+                                isModelLoading = false
+                                isLoading = false
+                            }
                         }
-                    }
-                },
-                modes = availableModes,
-                onAddMode = { showCreateModeDialog = true }
+                    },
+                    modes = availableModes,
+                    onAddMode = { showCreateModeDialog = true }
             )
 
             // Barre de saisie "Flottante"
 
             Surface(
-
-                modifier = Modifier
-                    .padding(16.dp)
-                    .navigationBarsPadding()
-                    .fillMaxWidth(),
-                shape = RoundedCornerShape(32.dp),
-                tonalElevation = 8.dp,
-                shadowElevation = 12.dp,
-                color = MaterialTheme.colorScheme.surface
+                    modifier = Modifier.padding(16.dp).navigationBarsPadding().fillMaxWidth(),
+                    shape = RoundedCornerShape(32.dp),
+                    tonalElevation = 8.dp,
+                    shadowElevation = 12.dp,
+                    color = MaterialTheme.colorScheme.surface
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                 ) {
                     var showTools by remember { mutableStateOf(false) }
-                    
+
                     // Bouton d'expansion des outils (+)
                     IconButton(onClick = { showTools = !showTools }) {
                         Icon(
-                            imageVector = if (showTools) Icons.Default.Close else Icons.Default.Add,
-                            contentDescription = "Outils",
-                            tint = if (showTools) Color.Gray else threadColor,
-                            modifier = Modifier.graphicsLayer(rotationZ = if (showTools) 90f else 0f)
+                                imageVector =
+                                        if (showTools) Icons.Default.Close else Icons.Default.Add,
+                                contentDescription = "Outils",
+                                tint = if (showTools) Color.Gray else threadColor,
+                                modifier =
+                                        Modifier.graphicsLayer(
+                                                rotationZ = if (showTools) 90f else 0f
+                                        )
                         )
                     }
 
                     androidx.compose.animation.AnimatedVisibility(
-                        visible = showTools,
-                        enter = fadeIn() + expandHorizontally(),
-                        exit = fadeOut() + shrinkHorizontally()
+                            visible = showTools,
+                            enter = fadeIn() + expandHorizontally(),
+                            exit = fadeOut() + shrinkHorizontally()
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             // Analyse d'image
-                            IconButton(onClick = { 
-                                showTools = false
-                                onPickImage { uri ->
-                                    selectedImageUri = uri
-                                }
-                            }) {
+                            IconButton(
+                                    onClick = {
+                                        showTools = false
+                                        onPickImage { uri -> selectedImageUri = uri }
+                                    }
+                            ) {
                                 Box {
-                                    Icon(Icons.Default.Image, contentDescription = "Image", tint = threadColor)
+                                    Icon(
+                                            Icons.Default.Image,
+                                            contentDescription = "Image",
+                                            tint = threadColor
+                                    )
                                     if (selectedImageUri != null) {
                                         Surface(
-                                            modifier = Modifier.size(8.dp).align(Alignment.TopEnd),
-                                            shape = CircleShape,
-                                            color = Color(0xFF4CAF50),
-                                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White)
+                                                modifier =
+                                                        Modifier.size(8.dp).align(Alignment.TopEnd),
+                                                shape = CircleShape,
+                                                color = Color(0xFF4CAF50),
+                                                border =
+                                                        androidx.compose.foundation.BorderStroke(
+                                                                1.dp,
+                                                                Color.White
+                                                        )
                                         ) {}
                                     }
                                 }
                             }
 
                             // Dictée Vocale
-                            IconButton(onClick = { 
-                                showTools = false
-                                voiceAssistant.startListening() 
-                            }) {
-                                Icon(Icons.Default.Mic, contentDescription = "Vocal", tint = threadColor)
-                            }
-                            
-                            // Lecture automatique
-                            IconButton(onClick = { 
-                                val next = !isAutoReadEnabled
-                                onAutoReadToggle(next)
-                            }) {
+                            IconButton(
+                                    onClick = {
+                                        showTools = false
+                                        voiceAssistant.startListening()
+                                    }
+                            ) {
                                 Icon(
-                                    imageVector = if (isAutoReadEnabled) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
-                                    contentDescription = "Auto-read",
-                                    tint = if (isAutoReadEnabled) threadColor else Color.Gray
+                                        Icons.Default.Mic,
+                                        contentDescription = "Vocal",
+                                        tint = threadColor
                                 )
                             }
-                            
-                            Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color.LightGray.copy(alpha = 0.5f)))
+
+                            // Lecture automatique
+                            IconButton(
+                                    onClick = {
+                                        val next = !isAutoReadEnabled
+                                        onAutoReadToggle(next)
+                                    }
+                            ) {
+                                Icon(
+                                        imageVector =
+                                                if (isAutoReadEnabled) Icons.Default.VolumeUp
+                                                else Icons.Default.VolumeOff,
+                                        contentDescription = "Auto-read",
+                                        tint = if (isAutoReadEnabled) threadColor else Color.Gray
+                                )
+                            }
+
+                            Box(
+                                    modifier =
+                                            Modifier.width(1.dp)
+                                                    .height(24.dp)
+                                                    .background(Color.LightGray.copy(alpha = 0.5f))
+                            )
                         }
                     }
 
-
-                    
                     OutlinedTextField(
-
-                        value = input,
-                        onValueChange = { input = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = {
-                            Text(
-                                if (currentThreadId == "main") "Demander quelque chose..."
-                                else "Message dans ${currentThreadId.replace("_", " ")}...",
-                                color = Color.Gray
-                            )
-                        },
-                        shape = RoundedCornerShape(28.dp),
-                        colors = TextFieldDefaults.outlinedTextFieldColors(
-                            containerColor = Color.Transparent,
-                            unfocusedBorderColor = threadColor.copy(alpha = 0.3f),
-                            focusedBorderColor = threadColor
-                        ),
-                        maxLines = 6
+                            value = input,
+                            onValueChange = { input = it },
+                            modifier = Modifier.weight(1f),
+                            placeholder = {
+                                Text(
+                                        if (currentThreadId == "main") "Demander quelque chose..."
+                                        else "Message dans ${currentThreadId.replace("_", " ")}...",
+                                        color = Color.Gray
+                                )
+                            },
+                            shape = RoundedCornerShape(28.dp),
+                            colors =
+                                    TextFieldDefaults.outlinedTextFieldColors(
+                                            containerColor = Color.Transparent,
+                                            unfocusedBorderColor = threadColor.copy(alpha = 0.3f),
+                                            focusedBorderColor = threadColor
+                                    ),
+                            maxLines = 6
                     )
-                    
+
                     Spacer(modifier = Modifier.width(8.dp))
-                    
+
                     Surface(
-                        onClick = {
-                            if (input.isNotBlank() && !isLoading) {
-                                val userMsg = input
-                                val updatedWithUser = currentMessages + JarvisChatMessage(text = userMsg, isUser = true, isError = false)
-                                val updated = threadMessages.toMutableMap()
-                                updated[currentThreadId] = updatedWithUser
-                                threadMessages = updated
-                                if (currentThreadId == "main") onMessagesChange(updatedWithUser)
-                                input = ""
-                                
-                                coroutineScope.launch {
-                                    if (selectedImageUri != null) {
-                                        try {
-                                            val inputStream = context.contentResolver.openInputStream(selectedImageUri!!)
-                                            val bytes = inputStream?.readBytes()
-                                            if (bytes != null) {
-                                                selectedImageBase64 = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
+                            onClick = {
+                                if (input.isNotBlank() && !isLoading) {
+                                    val userMsg = input
+                                    val updatedWithUser =
+                                            currentMessages +
+                                                    JarvisChatMessage(
+                                                            text = userMsg,
+                                                            isUser = true,
+                                                            isError = false
+                                                    )
+                                    val updated = threadMessages.toMutableMap()
+                                    updated[currentThreadId] = updatedWithUser
+                                    threadMessages = updated
+                                    if (currentThreadId == "main") onMessagesChange(updatedWithUser)
+                                    input = ""
+
+                                    coroutineScope.launch {
+                                        if (selectedImageUri != null) {
+                                            try {
+                                                val inputStream =
+                                                        context.contentResolver.openInputStream(
+                                                                selectedImageUri!!
+                                                        )
+                                                val bytes = inputStream?.readBytes()
+                                                if (bytes != null) {
+                                                    selectedImageBase64 =
+                                                            android.util.Base64.encodeToString(
+                                                                    bytes,
+                                                                    android.util.Base64.DEFAULT
+                                                            )
+                                                }
+                                            } catch (e: Exception) {
+                                                Log.e(
+                                                        "JarvisVision",
+                                                        "Erreur encodage image: ${e.message}"
+                                                )
                                             }
-                                        } catch (e: Exception) {
-                                            Log.e("JarvisVision", "Erreur encodage image: ${e.message}")
+                                            selectedImageUri = null
                                         }
-                                        selectedImageUri = null
-                                    }
 
-                                    isLoading = true
-                                    isModelLaunching = true
-                                    isOptimizing = false
-                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                    
-                                    // Timer pour le "fallback" visuel
-                                    launch {
-                                        kotlinx.coroutines.delay(5000)
-                                        if (isLoading) isOptimizing = true
-                                    }
-                                    
-                                    try {
-                                        val prefs = context.getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
-                                        var token = prefs.getString("google_id_token", null)
-                                        val freshToken = onRefreshToken()
-                                        if (freshToken != null) token = freshToken
-                                        val name = googleAccount?.displayName ?: "Antoine"
-                                        val response = JarvisApiClient.apiService.sendMessage(
-                                            ChatRequest(userMsg, token, name, lat, lng, currentThreadId, mode = currentMode, image_base64 = selectedImageBase64)
-                                        )
-                                        selectedImageBase64 = null
-                                        isModelLaunching = false
-
-
-                                        val rawText = response.response ?: response.text ?: "Aucune réponse."
-                                        // Nettoyage agressif de TOUTES les balises techniques [DATE], [HEURE], [CONTEXTE], etc.
-                                        val cleanText = rawText.replace(Regex("\\[(CONTEXTE|DATE|HEURE|USER|INFO).*?\\]\\n?", RegexOption.DOT_MATCHES_ALL), "")
-                                                               .replace(Regex("\\[.*?\\]"), "") // Sécurité supplémentaire pour toute balise [ ]
-                                                               .trim()
-                                        
-                                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                        
-                                        val jarvisMsg = JarvisChatMessage(text = cleanText, isUser = false, isError = false, isNew = true)
-                                        
-                                        // Lecture vocale automatique si activée
-                                        if (isAutoReadEnabled) {
-                                            voiceAssistant?.speak(cleanText)
-                                        }
-                                        
-                                        val withResponse = updatedWithUser + jarvisMsg
-
-                                        val updatedFinal = threadMessages.toMutableMap()
-                                        updatedFinal[currentThreadId] = withResponse
-                                        threadMessages = updatedFinal
-                                        if (currentThreadId == "main") onMessagesChange(withResponse)
-                                    } catch (e: Exception) {
-                                        val errMsg = JarvisChatMessage("Erreur de connexion.", isUser = false, isError = true)
-                                        val updatedErr = threadMessages.toMutableMap()
-                                        updatedErr[currentThreadId] = updatedWithUser + errMsg
-                                        threadMessages = updatedErr
-                                        if (currentThreadId == "main") onMessagesChange(updatedWithUser + errMsg)
-                                    } finally {
-                                        isLoading = false
-                                        isModelLaunching = false
-                                        isModelLoading = false
+                                        isLoading = true
+                                        isModelLaunching = true
                                         isOptimizing = false
+                                        haptic.performHapticFeedback(
+                                                androidx.compose.ui.hapticfeedback
+                                                        .HapticFeedbackType.LongPress
+                                        )
+
+                                        // Timer pour le "fallback" visuel
+                                        launch {
+                                            kotlinx.coroutines.delay(5000)
+                                            if (isLoading) isOptimizing = true
+                                        }
+
+                                        try {
+                                            val prefs =
+                                                    context.getSharedPreferences(
+                                                            "CortexPrefs",
+                                                            Context.MODE_PRIVATE
+                                                    )
+                                            var token = prefs.getString("google_id_token", null)
+                                            val freshToken = onRefreshToken()
+                                            if (freshToken != null) token = freshToken
+                                            val response =
+                                                    JarvisApiClient.apiService.sendMessage(
+                                                            ChatRequest(
+                                                                    userMsg,
+                                                                    token,
+                                                                    currentUserName,
+                                                                    lat,
+                                                                    lng,
+                                                                    currentThreadId,
+                                                                    mode = currentMode,
+                                                                    image_base64 =
+                                                                            selectedImageBase64
+                                                            )
+                                                    )
+                                            selectedImageBase64 = null
+                                            isModelLaunching = false
+
+                                            val rawText =
+                                                    response.response
+                                                            ?: response.text ?: "Aucune réponse."
+                                            // Nettoyage agressif de TOUTES les balises techniques
+                                            // [DATE], [HEURE], [CONTEXTE], etc.
+                                            val cleanText =
+                                                    rawText.replace(
+                                                                    Regex(
+                                                                            "\\[(CONTEXTE|DATE|HEURE|USER|INFO).*?\\]\\n?",
+                                                                            RegexOption
+                                                                                    .DOT_MATCHES_ALL
+                                                                    ),
+                                                                    ""
+                                                            )
+                                                            .replace(
+                                                                    Regex("\\[.*?\\]"),
+                                                                    ""
+                                                            ) // Sécurité supplémentaire pour toute
+                                                            // balise [ ]
+                                                            .trim()
+
+                                            haptic.performHapticFeedback(
+                                                    androidx.compose.ui.hapticfeedback
+                                                            .HapticFeedbackType.TextHandleMove
+                                            )
+
+                                            val jarvisMsg =
+                                                    JarvisChatMessage(
+                                                            text = cleanText,
+                                                            isUser = false,
+                                                            isError = false,
+                                                            isNew = true
+                                                    )
+
+                                            // Lecture vocale automatique si activée
+                                            if (isAutoReadEnabled) {
+                                                voiceAssistant?.speak(cleanText)
+                                            }
+
+                                            val withResponse = updatedWithUser + jarvisMsg
+
+                                            val updatedFinal = threadMessages.toMutableMap()
+                                            updatedFinal[currentThreadId] = withResponse
+                                            threadMessages = updatedFinal
+                                            if (currentThreadId == "main")
+                                                    onMessagesChange(withResponse)
+                                        } catch (e: Exception) {
+                                            val errMsg =
+                                                    JarvisChatMessage(
+                                                            "Erreur de connexion.",
+                                                            isUser = false,
+                                                            isError = true
+                                                    )
+                                            val updatedErr = threadMessages.toMutableMap()
+                                            updatedErr[currentThreadId] = updatedWithUser + errMsg
+                                            threadMessages = updatedErr
+                                            if (currentThreadId == "main")
+                                                    onMessagesChange(updatedWithUser + errMsg)
+                                        } finally {
+                                            isLoading = false
+                                            isModelLaunching = false
+                                            isModelLoading = false
+                                            isOptimizing = false
+                                        }
                                     }
                                 }
-                            }
-                        },
-                        shape = CircleShape,
-                        color = threadColor,
-                        modifier = Modifier.size(48.dp),
-                        enabled = input.isNotBlank() && !isLoading
+                            },
+                            shape = CircleShape,
+                            color = threadColor,
+                            modifier = Modifier.size(48.dp),
+                            enabled = input.isNotBlank() && !isLoading
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             if (isLoading) {
-                                CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+                                CircularProgressIndicator(
+                                        modifier = Modifier.size(22.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                )
                             } else {
-                                Text("↑", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text(
+                                        "↑",
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                )
                             }
                         }
                     }
@@ -1722,99 +2032,128 @@ fun JarvisScreen(
             }
         }
 
-
         // --- VOILE DE FOND (Scrim) ---
         androidx.compose.animation.AnimatedVisibility(
-            visible = showSidebar,
-            enter = fadeIn(),
-            exit = fadeOut()
+                visible = showSidebar,
+                enter = fadeIn(),
+                exit = fadeOut()
         ) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.4f))
-                    .clickable { showSidebar = false }
+                    modifier =
+                            Modifier.fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.4f))
+                                    .clickable { showSidebar = false }
             )
         }
 
         // --- SIDEBAR (Overlay) ---
         androidx.compose.animation.AnimatedVisibility(
-            visible = showSidebar,
-            enter = androidx.compose.animation.slideInHorizontally() + androidx.compose.animation.fadeIn(),
-            exit = androidx.compose.animation.slideOutHorizontally() + androidx.compose.animation.fadeOut()
+                visible = showSidebar,
+                enter =
+                        androidx.compose.animation.slideInHorizontally() +
+                                androidx.compose.animation.fadeIn(),
+                exit =
+                        androidx.compose.animation.slideOutHorizontally() +
+                                androidx.compose.animation.fadeOut()
         ) {
-            Surface(
-                modifier = Modifier.width(260.dp).fillMaxHeight().blur(if (android.os.Build.VERSION.SDK_INT >= 31) 15.dp else 0.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                shadowElevation = 16.dp,
-                tonalElevation = 8.dp
-            ) {
-                Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                    Text(
-                        "🤖 Discussions",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(bottom = 12.dp)
+            Box(modifier = Modifier.width(260.dp).fillMaxHeight()) {
+                // Fond glassmorphism (blur uniquement sur ce layer)
+                if (android.os.Build.VERSION.SDK_INT >= 31) {
+                    Box(
+                            modifier =
+                                    Modifier.fillMaxSize()
+                                            .blur(20.dp)
+                                            .background(
+                                                    MaterialTheme.colorScheme.surface.copy(
+                                                            alpha = 0.85f
+                                                    )
+                                            )
                     )
+                }
+                Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color =
+                                MaterialTheme.colorScheme.surface.copy(
+                                        alpha =
+                                                if (android.os.Build.VERSION.SDK_INT >= 31) 0.1f
+                                                else 0.97f
+                                ),
+                        shadowElevation = 16.dp,
+                        tonalElevation = 8.dp
+                ) {
+                    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                        Text(
+                                "🤖 Discussions",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(bottom = 12.dp)
+                        )
 
-                    threads.forEach { threadId ->
-                        val isSelected = threadId == currentThreadId
-                        val icon = when {
-                            threadId == "main" -> "🏠"
-                            threadId.contains("briefing") -> "⚡"
-                            threadId.contains("dev") -> "🛠️"
-                            threadId.contains("nsi") -> "💻"
-                            threadId.contains("projet") -> "🚀"
-                            else -> "📌"
-                        }
-                        val displayName = if (threadId == "main") "Général" 
-                                          else threadId.replace("_", " ").replaceFirstChar { it.uppercase() }
+                        threads.forEach { threadId ->
+                            val isSelected = threadId == currentThreadId
+                            val icon =
+                                    when {
+                                        threadId == "main" -> "🏠"
+                                        threadId.contains("briefing") -> "⚡"
+                                        threadId.contains("dev") -> "🛠️"
+                                        threadId.contains("nsi") -> "💻"
+                                        threadId.contains("projet") -> "🚀"
+                                        else -> "📌"
+                                    }
+                            val displayName =
+                                    if (threadId == "main") "Général"
+                                    else
+                                            threadId.replace("_", " ").replaceFirstChar {
+                                                it.uppercase()
+                                            }
 
-                        Surface(
-                            onClick = {
-                                currentThreadId = threadId
-                                showSidebar = false
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) threadColor.copy(alpha = 0.2f)
-                                    else Color.Transparent,
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            Surface(
+                                    onClick = {
+                                        currentThreadId = threadId
+                                        showSidebar = false
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color =
+                                            if (isSelected) threadColor.copy(alpha = 0.2f)
+                                            else Color.Transparent,
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
                             ) {
-                                Text(icon, fontSize = 18.sp)
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    displayName,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) threadColor else MaterialTheme.colorScheme.onSurface,
-                                    fontSize = 15.sp
-                                )
+                                Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(icon, fontSize = 18.sp)
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                            displayName,
+                                            fontWeight =
+                                                    if (isSelected) FontWeight.Bold
+                                                    else FontWeight.Medium,
+                                            color =
+                                                    if (isSelected) threadColor
+                                                    else MaterialTheme.colorScheme.onSurface,
+                                            fontSize = 15.sp
+                                    )
+                                }
                             }
                         }
-                    }
 
+                        Spacer(modifier = Modifier.weight(1f))
 
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    // Bouton "+" Créer un canal
-                    Button(
-                        onClick = { showNewThreadDialog = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = threadColor)
-                    ) {
-                        Text("+ Nouveau canal")
+                        // Bouton "+" Créer un canal
+                        Button(
+                                onClick = { showNewThreadDialog = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = threadColor)
+                        ) { Text("+ Nouveau canal") }
                     }
                 }
-            }
-        }
+            } // close Surface
+        } // close Box glassmorphism
     }
 }
-
 
 @Composable
 fun SettingsScreen(
@@ -1834,7 +2173,6 @@ fun SettingsScreen(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-
         Text(
                 "⚙️ Paramètres",
                 fontSize = 28.sp,
@@ -1872,19 +2210,26 @@ fun SettingsScreen(
                                 }
                             }
                     )
-
                 }
                 if (isBriefingEnabled) {
                     Spacer(modifier = Modifier.height(8.dp))
                     TextButton(
-                        onClick = {
-                            val timePicker = android.app.TimePickerDialog(context, { _, h, m ->
-                                onBriefingTimeChange(h, m)
-                            }, briefingHour, briefingMinute, true)
-                            timePicker.show()
-                        }
+                            onClick = {
+                                val timePicker =
+                                        android.app.TimePickerDialog(
+                                                context,
+                                                { _, h, m -> onBriefingTimeChange(h, m) },
+                                                briefingHour,
+                                                briefingMinute,
+                                                true
+                                        )
+                                timePicker.show()
+                            }
                     ) {
-                        Text("Heure du briefing : ${String.format("%02d:%02d", briefingHour, briefingMinute)}", color = MaterialTheme.colorScheme.primary)
+                        Text(
+                                "Heure du briefing : ${String.format("%02d:%02d", briefingHour, briefingMinute)}",
+                                color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
 
@@ -1902,12 +2247,18 @@ fun SettingsScreen(
         Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Button(
-                    onClick = onExploreMemory,
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                        onClick = onExploreMemory,
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors =
+                                ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                                )
                 ) {
-                    Text("🧠 Explorer ce que Jarvis sait", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text(
+                            "🧠 Explorer ce que Jarvis sait",
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
                 }
             }
         }
@@ -1969,9 +2320,8 @@ fun TaskCard(task: TaskItem, onDelete: () -> Unit) {
     val taskScore = task.score ?: 0.0
     val accentColor =
             if (taskScore >= 70) Color(0xFFFF5252)
-            else if (taskScore >= 40) Color(0xFFFFB300)
-            else Color(0xFF00E676)
-            
+            else if (taskScore >= 40) Color(0xFFFFB300) else Color(0xFF00E676)
+
     Card(
             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
             shape = RoundedCornerShape(20.dp),
@@ -1983,35 +2333,29 @@ fun TaskCard(task: TaskItem, onDelete: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
         ) {
             // Barre de priorité sur le côté
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(6.dp)
-                    .background(accentColor)
-            )
-            
+            Box(modifier = Modifier.fillMaxHeight().width(6.dp).background(accentColor))
+
             Row(
-                modifier = Modifier.padding(16.dp).weight(1f),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier.padding(16.dp).weight(1f),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(task.name ?: "Sans titre", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("Priorité : ${(task.score ?: 0.0).toInt()}%", fontSize = 12.sp, color = Color.Gray)
+                    Text(
+                            "Priorité : ${(task.score ?: 0.0).toInt()}%",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                    )
                 }
                 IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.background(accentColor.copy(alpha = 0.1f), CircleShape)
-                ) { 
-                    Text("✅", fontSize = 16.sp) 
-                }
+                        onClick = onDelete,
+                        modifier = Modifier.background(accentColor.copy(alpha = 0.1f), CircleShape)
+                ) { Text("✅", fontSize = 16.sp) }
             }
         }
     }
 }
-
-
-
 
 @Composable
 fun ThemeOptionRow(
@@ -2028,28 +2372,26 @@ fun ThemeOptionRow(
         Text(label, modifier = Modifier.padding(start = 8.dp))
     }
 }
+
 @Composable
 fun ThinkingWave(color: Color) {
     val infiniteTransition = rememberInfiniteTransition()
-    val waveOffset by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 2f * Math.PI.toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        )
-    )
+    val waveOffset by
+            infiniteTransition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = 2f * Math.PI.toFloat(),
+                    animationSpec =
+                            infiniteRepeatable(
+                                    animation = tween(1200, easing = LinearEasing),
+                                    repeatMode = RepeatMode.Restart
+                            )
+            )
 
-    Canvas(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(40.dp)
-            .padding(vertical = 8.dp)
-    ) {
+    Canvas(modifier = Modifier.fillMaxWidth().height(40.dp).padding(vertical = 8.dp)) {
         val width = size.width
         val height = size.height
         val points = mutableListOf<androidx.compose.ui.geometry.Offset>()
-        
+
         for (x in 0..width.toInt() step 5) {
             val relativeX = x.toFloat() / width
             val sine = Math.sin((relativeX * 3f * Math.PI) + waveOffset).toFloat()
@@ -2057,49 +2399,53 @@ fun ThinkingWave(color: Color) {
             points.add(androidx.compose.ui.geometry.Offset(x.toFloat(), y))
         }
 
-        val path = androidx.compose.ui.graphics.Path().apply {
-            moveTo(points[0].x, points[0].y)
-            for (i in 1 until points.size) {
-                lineTo(points[i].x, points[i].y)
-            }
-        }
+        val path =
+                androidx.compose.ui.graphics.Path().apply {
+                    moveTo(points[0].x, points[0].y)
+                    for (i in 1 until points.size) {
+                        lineTo(points[i].x, points[i].y)
+                    }
+                }
 
         drawPath(
-            path = path,
-            color = color,
-            style = androidx.compose.ui.graphics.drawscope.Stroke(
-                width = 3.dp.toPx(),
-                cap = androidx.compose.ui.graphics.StrokeCap.Round
-            )
+                path = path,
+                color = color,
+                style =
+                        androidx.compose.ui.graphics.drawscope.Stroke(
+                                width = 3.dp.toPx(),
+                                cap = androidx.compose.ui.graphics.StrokeCap.Round
+                        )
         )
-        
+
         // Deuxième onde décalée
-        val path2 = androidx.compose.ui.graphics.Path().apply {
-            moveTo(points[0].x, points[0].y + 4f)
-            for (i in 1 until points.size) {
-                val relativeX = points[i].x / width
-                val sine = Math.sin((relativeX * 3f * Math.PI) + waveOffset + 1f).toFloat()
-                val y = height / 2f + sine * 8f
-                lineTo(points[i].x, y)
-            }
-        }
-        
+        val path2 =
+                androidx.compose.ui.graphics.Path().apply {
+                    moveTo(points[0].x, points[0].y + 4f)
+                    for (i in 1 until points.size) {
+                        val relativeX = points[i].x / width
+                        val sine = Math.sin((relativeX * 3f * Math.PI) + waveOffset + 1f).toFloat()
+                        val y = height / 2f + sine * 8f
+                        lineTo(points[i].x, y)
+                    }
+                }
+
         drawPath(
-            path = path2,
-            color = color.copy(alpha = 0.4f),
-            style = androidx.compose.ui.graphics.drawscope.Stroke(
-                width = 2.dp.toPx(),
-                cap = androidx.compose.ui.graphics.StrokeCap.Round
-            )
+                path = path2,
+                color = color.copy(alpha = 0.4f),
+                style =
+                        androidx.compose.ui.graphics.drawscope.Stroke(
+                                width = 2.dp.toPx(),
+                                cap = androidx.compose.ui.graphics.StrokeCap.Round
+                        )
         )
     }
 }
 
 @Composable
 fun MemoryExplorerScreen(
-    currentUserId: String,
-    onDismiss: () -> Unit,
-    onDeleteFact: (String) -> Unit
+        currentUserId: String,
+        onDismiss: () -> Unit,
+        onDeleteFact: (String) -> Unit
 ) {
     var memories by remember { mutableStateOf<List<MemoryFact>>(emptyList()) }
     var preferences by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
@@ -2119,45 +2465,41 @@ fun MemoryExplorerScreen(
         }
     }
 
-
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.8f))
-            .clickable(onClick = onDismiss),
-        contentAlignment = Alignment.Center
+            modifier =
+                    Modifier.fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.8f))
+                            .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
     ) {
         Surface(
-            modifier = Modifier
-                .fillMaxWidth(0.9f)
-                .fillMaxHeight(0.8f)
-                .clickable(enabled = false) { }, // Prevent dismiss when clicking inside
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 8.dp
+                modifier =
+                        Modifier.fillMaxWidth(0.9f).fillMaxHeight(0.8f).clickable(enabled = false) {
+                        }, // Prevent dismiss when clicking inside
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 8.dp
         ) {
             Column(modifier = Modifier.padding(24.dp)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "🧠 Mémoire de Jarvis",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                            "🧠 Mémoire de Jarvis",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
                     )
-                    IconButton(onClick = onDismiss) {
-                        Text("❌", fontSize = 16.sp)
-                    }
+                    IconButton(onClick = onDismiss) { Text("❌", fontSize = 16.sp) }
                 }
-                
+
                 Text(
-                    "Voici ce que Jarvis a retenu sur vous. Vous pouvez supprimer des faits si nécessaire.",
-                    fontSize = 13.sp,
-                    color = Color.Gray,
-                    modifier = Modifier.padding(vertical = 8.dp)
+                        "Voici ce que Jarvis a retenu sur vous. Vous pouvez supprimer des faits si nécessaire.",
+                        fontSize = 13.sp,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(vertical = 8.dp)
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -2167,32 +2509,95 @@ fun MemoryExplorerScreen(
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
                 } else {
-                    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    Row(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
                         TextButton(onClick = { selectedTab = 0 }) {
-                            Text("Faits", color = if (selectedTab == 0) MaterialTheme.colorScheme.primary else Color.Gray, fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal)
+                            Text(
+                                    "Faits",
+                                    color =
+                                            if (selectedTab == 0) MaterialTheme.colorScheme.primary
+                                            else Color.Gray,
+                                    fontWeight =
+                                            if (selectedTab == 0) FontWeight.Bold
+                                            else FontWeight.Normal
+                            )
                         }
                         TextButton(onClick = { selectedTab = 1 }) {
-                            Text("Préférences", color = if (selectedTab == 1) MaterialTheme.colorScheme.primary else Color.Gray, fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal)
+                            Text(
+                                    "Préférences",
+                                    color =
+                                            if (selectedTab == 1) MaterialTheme.colorScheme.primary
+                                            else Color.Gray,
+                                    fontWeight =
+                                            if (selectedTab == 1) FontWeight.Bold
+                                            else FontWeight.Normal
+                            )
                         }
                     }
 
                     if (selectedTab == 0) {
                         if (memories.isEmpty()) {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text("Jarvis n'a pas encore mémorisé de faits.", textAlign = TextAlign.Center, color = Color.Gray)
+                            Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                        "Jarvis n'a pas encore mémorisé de faits.",
+                                        textAlign = TextAlign.Center,
+                                        color = Color.Gray
+                                )
                             }
                         } else {
                             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 items(memories) { item ->
-                                    Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), border = androidx.compose.foundation.BorderStroke(0.5.dp, Color.Gray.copy(alpha = 0.1f))) {
-                                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(16.dp),
+                                            color =
+                                                    MaterialTheme.colorScheme.surfaceVariant.copy(
+                                                            alpha = 0.5f
+                                                    ),
+                                            border =
+                                                    androidx.compose.foundation.BorderStroke(
+                                                            0.5.dp,
+                                                            Color.Gray.copy(alpha = 0.1f)
+                                                    )
+                                    ) {
+                                        Row(
+                                                modifier = Modifier.padding(16.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                        ) {
                                             Column(modifier = Modifier.weight(1f)) {
-                                                Text(item.fact, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                                                Text(item.timestamp.split(" ")[0], fontSize = 11.sp, color = Color.Gray)
+                                                Text(
+                                                        item.fact,
+                                                        fontSize = 15.sp,
+                                                        fontWeight = FontWeight.Medium
+                                                )
+                                                Text(
+                                                        item.timestamp.split(" ")[0],
+                                                        fontSize = 11.sp,
+                                                        color = Color.Gray
+                                                )
                                             }
-                                            IconButton(onClick = { onDeleteFact(item.fact); memories = memories.filter { it.fact != item.fact } }, modifier = Modifier.size(32.dp).background(Color.Red.copy(alpha = 0.1f), CircleShape)) {
-                                                Text("🗑️", fontSize = 14.sp)
-                                            }
+                                            IconButton(
+                                                    onClick = {
+                                                        onDeleteFact(item.fact)
+                                                        memories =
+                                                                memories.filter {
+                                                                    it.fact != item.fact
+                                                                }
+                                                    },
+                                                    modifier =
+                                                            Modifier.size(32.dp)
+                                                                    .background(
+                                                                            Color.Red.copy(
+                                                                                    alpha = 0.1f
+                                                                            ),
+                                                                            CircleShape
+                                                                    )
+                                            ) { Text("🗑️", fontSize = 14.sp) }
                                         }
                                     }
                                 }
@@ -2200,19 +2605,49 @@ fun MemoryExplorerScreen(
                         }
                     } else {
                         if (preferences.isEmpty()) {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text("Aucune préférence définie.", textAlign = TextAlign.Center, color = Color.Gray)
+                            Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                        "Aucune préférence définie.",
+                                        textAlign = TextAlign.Center,
+                                        color = Color.Gray
+                                )
                             }
                         } else {
                             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 items(preferences.toList()) { entry ->
                                     val (key, value) = entry
-                                    Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), border = androidx.compose.foundation.BorderStroke(0.5.dp, Color.Gray.copy(alpha = 0.1f))) {
-
-                                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(16.dp),
+                                            color =
+                                                    MaterialTheme.colorScheme.surfaceVariant.copy(
+                                                            alpha = 0.5f
+                                                    ),
+                                            border =
+                                                    androidx.compose.foundation.BorderStroke(
+                                                            0.5.dp,
+                                                            Color.Gray.copy(alpha = 0.1f)
+                                                    )
+                                    ) {
+                                        Row(
+                                                modifier = Modifier.padding(16.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                        ) {
                                             Column(modifier = Modifier.weight(1f)) {
-                                                Text(key, fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
-                                                Text(value, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                                Text(
+                                                        key,
+                                                        fontSize = 12.sp,
+                                                        color = Color.Gray,
+                                                        fontWeight = FontWeight.Medium
+                                                )
+                                                Text(
+                                                        value,
+                                                        fontSize = 15.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                )
                                             }
                                         }
                                     }
@@ -2228,82 +2663,102 @@ fun MemoryExplorerScreen(
 
 @Composable
 fun JarvisOrb(
-    isThinking: Boolean = true,
-    isToolRunning: Boolean = false,
-    isModelLoading: Boolean = false,
-    isModelLaunching: Boolean = false,
-    toolName: String? = null,
-    baseColor: Color = MaterialTheme.colorScheme.primary
+        isThinking: Boolean = true,
+        isToolRunning: Boolean = false,
+        isModelLoading: Boolean = false,
+        isModelLaunching: Boolean = false,
+        toolName: String? = null,
+        baseColor: Color = MaterialTheme.colorScheme.primary
 ) {
     val infiniteTransition = rememberInfiniteTransition()
-    
+
     // Animation de pulsation de base
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.2f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        )
-    )
+    val pulseScale by
+            infiniteTransition.animateFloat(
+                    initialValue = 1f,
+                    targetValue = 1.2f,
+                    animationSpec =
+                            infiniteRepeatable(
+                                    animation = tween(1500, easing = FastOutSlowInEasing),
+                                    repeatMode = RepeatMode.Reverse
+                            )
+            )
 
     // Animation de rotation pour les outils
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(if (isToolRunning) 2000 else 8000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        )
-    )
+    val rotation by
+            infiniteTransition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = 360f,
+                    animationSpec =
+                            infiniteRepeatable(
+                                    animation =
+                                            tween(
+                                                    if (isToolRunning) 2000 else 8000,
+                                                    easing = LinearEasing
+                                            ),
+                                    repeatMode = RepeatMode.Restart
+                            )
+            )
 
     // Couleur dynamique
-    val orbColor = when {
-        isModelLoading -> Color(0xFF00BCD4) // Cyan pour le chargement du modèle
-        isModelLaunching -> Color(0xFF4CAF50) // Vert pour le lancement API
-        isToolRunning -> Color(0xFFFF9800) // Doré/Orange pour les outils
-        else -> baseColor
-    }
+    val orbColor =
+            when {
+                isModelLoading -> Color(0xFF00BCD4) // Cyan pour le chargement du modèle
+                isModelLaunching -> Color(0xFF4CAF50) // Vert pour le lancement API
+                isToolRunning -> Color(0xFFFF9800) // Doré/Orange pour les outils
+                else -> baseColor
+            }
 
     Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp),
-        horizontalAlignment = Alignment.Start
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp),
+            horizontalAlignment = Alignment.Start
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(100.dp)) {
             // 1. Halo extérieur profond (Atmosphère)
             Canvas(modifier = Modifier.size(90.dp * pulseScale)) {
                 drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(orbColor.copy(alpha = 0.3f), Color.Transparent),
-                        center = center,
-                        radius = size.width / 1.2f
-                    )
+                        brush =
+                                Brush.radialGradient(
+                                        colors =
+                                                listOf(
+                                                        orbColor.copy(alpha = 0.3f),
+                                                        Color.Transparent
+                                                ),
+                                        center = center,
+                                        radius = size.width / 1.2f
+                                )
                 )
             }
 
             // 2. Anneau HUD rotatif (Sci-Fi)
             Canvas(modifier = Modifier.size(80.dp).graphicsLayer(rotationZ = -rotation * 0.5f)) {
                 drawCircle(
-                    color = orbColor.copy(alpha = 0.2f),
-                    style = Stroke(width = 1.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f)))
+                        color = orbColor.copy(alpha = 0.2f),
+                        style =
+                                Stroke(
+                                        width = 1.dp.toPx(),
+                                        pathEffect =
+                                                androidx.compose.ui.graphics.PathEffect
+                                                        .dashPathEffect(floatArrayOf(10f, 10f))
+                                )
                 )
             }
 
             // 3. Deuxième anneau HUD (Sens inverse)
             Canvas(modifier = Modifier.size(72.dp).graphicsLayer(rotationZ = rotation * 1.2f)) {
                 drawArc(
-                    color = orbColor.copy(alpha = 0.5f),
-                    startAngle = 0f,
-                    sweepAngle = 90f,
-                    useCenter = false,
-                    style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+                        color = orbColor.copy(alpha = 0.5f),
+                        startAngle = 0f,
+                        sweepAngle = 90f,
+                        useCenter = false,
+                        style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
                 )
                 drawArc(
-                    color = orbColor.copy(alpha = 0.5f),
-                    startAngle = 180f,
-                    sweepAngle = 90f,
-                    useCenter = false,
-                    style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+                        color = orbColor.copy(alpha = 0.5f),
+                        startAngle = 180f,
+                        sweepAngle = 90f,
+                        useCenter = false,
+                        style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
                 )
             }
 
@@ -2311,29 +2766,42 @@ fun JarvisOrb(
             Canvas(modifier = Modifier.size(45.dp).graphicsLayer(rotationZ = rotation * 0.3f)) {
                 val path = android.graphics.Path()
                 val radius = size.width / 2
-                
+
                 for (i in 0..360 step 30) {
                     val angle = Math.toRadians(i.toDouble())
-                    val variation = if (isThinking || isModelLoading || isModelLaunching) Math.sin(angle * 4 + (rotation / 15).toDouble()) * 4 else 0.0
+                    val variation =
+                            if (isThinking || isModelLoading || isModelLaunching)
+                                    Math.sin(angle * 4 + (rotation / 15).toDouble()) * 4
+                            else 0.0
                     val r = radius + variation
                     val x = center.x + (r * Math.cos(angle)).toFloat()
                     val y = center.y + (r * Math.sin(angle)).toFloat()
                     if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
                 }
                 path.close()
-                
+
                 // Remplissage avec gradient radial interne pour la profondeur
-                drawContext.canvas.nativeCanvas.drawPath(path, android.graphics.Paint().apply {
-                    shader = android.graphics.RadialGradient(
-                        center.x, center.y, radius,
-                        intArrayOf(Color.White.copy(alpha = 0.9f).toArgb(), orbColor.toArgb(), orbColor.copy(alpha = 0.8f).toArgb()),
-                        floatArrayOf(0f, 0.6f, 1f),
-                        android.graphics.Shader.TileMode.CLAMP
-                    )
-                    style = android.graphics.Paint.Style.FILL
-                    isAntiAlias = true
-                    setShadowLayer(30f, 0f, 0f, orbColor.toArgb())
-                })
+                drawContext.canvas.nativeCanvas.drawPath(
+                        path,
+                        android.graphics.Paint().apply {
+                            shader =
+                                    android.graphics.RadialGradient(
+                                            center.x,
+                                            center.y,
+                                            radius,
+                                            intArrayOf(
+                                                    Color.White.copy(alpha = 0.9f).toArgb(),
+                                                    orbColor.toArgb(),
+                                                    orbColor.copy(alpha = 0.8f).toArgb()
+                                            ),
+                                            floatArrayOf(0f, 0.6f, 1f),
+                                            android.graphics.Shader.TileMode.CLAMP
+                                    )
+                            style = android.graphics.Paint.Style.FILL
+                            isAntiAlias = true
+                            setShadowLayer(30f, 0f, 0f, orbColor.toArgb())
+                        }
+                )
             }
 
             // 5. Système de Particules "Synaptiques" (Nouveau)
@@ -2342,59 +2810,60 @@ fun JarvisOrb(
                     val particleRotation = (rotation * (1f + i * 0.1f)) % 360f
                     val particleDistance = 50.dp + (i * 2).dp
                     val particleSize = 2.dp + (i % 3).dp
-                    
+
                     Box(
-                        modifier = Modifier
-                            .graphicsLayer {
-                                rotationZ = particleRotation + (i * 45)
-                                translationX = particleDistance.toPx()
-                            }
-                            .size(particleSize)
-                            .background(orbColor.copy(alpha = 0.6f), CircleShape)
+                            modifier =
+                                    Modifier.graphicsLayer {
+                                                rotationZ = particleRotation + (i * 45)
+                                                translationX = particleDistance.toPx()
+                                            }
+                                            .size(particleSize)
+                                            .background(orbColor.copy(alpha = 0.6f), CircleShape)
                     )
                 }
             }
-            
+
             if (isToolRunning) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(65.dp),
-                    color = Color(0xFFFF9800),
-                    strokeWidth = 3.dp
+                        modifier = Modifier.size(65.dp),
+                        color = Color(0xFFFF9800),
+                        strokeWidth = 3.dp
                 )
             }
         }
 
-        
         if (isModelLoading) {
             Text(
-                if (isModelLoading && !isThinking && !isModelLaunching) "Chargement du modèle..." else "Optimisation du modèle...",
-                fontSize = 12.sp,
-                color = orbColor,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 8.dp)
+                    if (isModelLoading && !isThinking && !isModelLaunching)
+                            "Chargement du modèle..."
+                    else "Optimisation du modèle...",
+                    fontSize = 12.sp,
+                    color = orbColor,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 8.dp)
             )
         } else if (isModelLaunching) {
             Text(
-                "Lancement du modèle...",
-                fontSize = 12.sp,
-                color = orbColor,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 8.dp)
+                    "Lancement du modèle...",
+                    fontSize = 12.sp,
+                    color = orbColor,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 8.dp)
             )
         } else if (isToolRunning && toolName != null) {
             Text(
-                "Jarvis utilise : $toolName",
-                fontSize = 12.sp,
-                color = orbColor,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 8.dp)
+                    "Jarvis utilise : $toolName",
+                    fontSize = 12.sp,
+                    color = orbColor,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 8.dp)
             )
         } else if (isThinking) {
             Text(
-                "Jarvis réfléchit...",
-                fontSize = 12.sp,
-                color = baseColor.copy(alpha = 0.7f),
-                modifier = Modifier.padding(top = 8.dp)
+                    "Jarvis réfléchit...",
+                    fontSize = 12.sp,
+                    color = baseColor.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(top = 8.dp)
             )
         }
     }
@@ -2403,41 +2872,40 @@ fun JarvisOrb(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun JarvisModeSelector(
-
-    selectedMode: String?,
-    onModeSelected: (String?) -> Unit,
-    modes: List<Map<String, String>>,
-    onAddMode: () -> Unit
+        selectedMode: String?,
+        onModeSelected: (String?) -> Unit,
+        modes: List<Map<String, String>>,
+        onAddMode: () -> Unit
 ) {
     LazyRow(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
     ) {
         item {
             ModeChip(
-                name = "Standard",
-                icon = "🤖",
-                isSelected = selectedMode == null,
-                onClick = { onModeSelected(null) }
+                    name = "Standard",
+                    icon = "🤖",
+                    isSelected = selectedMode == null,
+                    onClick = { onModeSelected(null) }
             )
         }
         items(modes) { mode ->
             val name = mode["name"] ?: ""
             ModeChip(
-                name = name,
-                icon = mode["icon"] ?: "💎",
-                color = Color(android.graphics.Color.parseColor(mode["color"] ?: "#4285F4")),
-                isSelected = selectedMode == name,
-                onClick = { onModeSelected(name) }
+                    name = name,
+                    icon = mode["icon"] ?: "💎",
+                    color = Color(android.graphics.Color.parseColor(mode["color"] ?: "#4285F4")),
+                    isSelected = selectedMode == name,
+                    onClick = { onModeSelected(name) }
             )
         }
         item {
             Surface(
-                onClick = onAddMode,
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(36.dp)
+                    onClick = onAddMode,
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(36.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text("+", fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -2449,11 +2917,7 @@ fun JarvisModeSelector(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateModeDialog(
-
-    onDismiss: () -> Unit,
-    onCreate: (String, String, String, String) -> Unit
-) {
+fun CreateModeDialog(onDismiss: () -> Unit, onCreate: (String, String, String, String) -> Unit) {
     var name by remember { mutableStateOf("") }
     var instruction by remember { mutableStateOf("") }
     var icon by remember { mutableStateOf("💎") }
@@ -2461,86 +2925,91 @@ fun CreateModeDialog(
     val colors = listOf("Bleu", "Rouge", "Vert", "Jaune", "Violet", "Rose", "Cyan", "Orange")
 
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Créer une nouvelle Gem (Mode)") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { newName -> name = newName },
-                    label = { Text("Nom du mode") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = instruction,
-                    onValueChange = { newInstr -> instruction = newInstr },
-                    label = { Text("Instructions système") },
-                    placeholder = { Text("Ex: Tu es un expert en cuisine...") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            onDismissRequest = onDismiss,
+            title = { Text("Créer une nouvelle Gem (Mode)") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
-                        value = icon,
-                        onValueChange = { newIcon -> icon = newIcon },
-                        label = { Text("Icône") },
-                        modifier = Modifier.width(80.dp)
+                            value = name,
+                            onValueChange = { newName -> name = newName },
+                            label = { Text("Nom du mode") },
+                            modifier = Modifier.fillMaxWidth()
                     )
-                    
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Couleur", fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(colors) { cName ->
-                                val hex = when (cName) {
-                                    "Bleu" -> "#4285F4"
-                                    "Rouge" -> "#EA4335"
-                                    "Vert" -> "#34A853"
-                                    "Jaune" -> "#FBBC04"
-                                    "Violet" -> "#A142F4"
-                                    "Rose" -> "#FF69B4"
-                                    "Cyan" -> "#00FFFF"
-                                    "Orange" -> "#FF8C00"
-                                    else -> "#4285F4"
+                    OutlinedTextField(
+                            value = instruction,
+                            onValueChange = { newInstr -> instruction = newInstr },
+                            label = { Text("Instructions système") },
+                            placeholder = { Text("Ex: Tu es un expert en cuisine...") },
+                            modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                                value = icon,
+                                onValueChange = { newIcon -> icon = newIcon },
+                                label = { Text("Icône") },
+                                modifier = Modifier.width(80.dp)
+                        )
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                    "Couleur",
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                            )
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(colors) { cName ->
+                                    val hex =
+                                            when (cName) {
+                                                "Bleu" -> "#4285F4"
+                                                "Rouge" -> "#EA4335"
+                                                "Vert" -> "#34A853"
+                                                "Jaune" -> "#FBBC04"
+                                                "Violet" -> "#A142F4"
+                                                "Rose" -> "#FF69B4"
+                                                "Cyan" -> "#00FFFF"
+                                                "Orange" -> "#FF8C00"
+                                                else -> "#4285F4"
+                                            }
+                                    val isColSelected = color == hex
+                                    Surface(
+                                            onClick = { color = hex },
+                                            modifier = Modifier.size(32.dp),
+                                            shape = CircleShape,
+                                            color = Color(android.graphics.Color.parseColor(hex)),
+                                            border =
+                                                    if (isColSelected)
+                                                            BorderStroke(2.dp, Color.Black)
+                                                    else null
+                                    ) {}
                                 }
-                                val isColSelected = color == hex
-                                Surface(
-                                    onClick = { color = hex },
-                                    modifier = Modifier.size(32.dp),
-                                    shape = CircleShape,
-                                    color = Color(android.graphics.Color.parseColor(hex)),
-                                    border = if (isColSelected) BorderStroke(2.dp, Color.Black) else null
-                                ) {}
                             }
                         }
                     }
                 }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onCreate(name, instruction, icon, color) },
-                enabled = name.isNotBlank() && instruction.isNotBlank()
-            ) {
-                Text("Créer")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Annuler")
-            }
-        }
+            },
+            confirmButton = {
+                Button(
+                        onClick = { onCreate(name, instruction, icon, color) },
+                        enabled = name.isNotBlank() && instruction.isNotBlank()
+                ) { Text("Créer") }
+            },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } }
     )
 }
 
 @Composable
 fun TypewriterText(
-    text: String,
-    modifier: Modifier = Modifier,
-    color: Color = Color.Unspecified,
-    onComplete: () -> Unit = {}
+        text: String,
+        modifier: Modifier = Modifier,
+        color: Color = Color.Unspecified,
+        onComplete: () -> Unit = {}
 ) {
     var displayedText by remember { mutableStateOf("") }
-    
+
     LaunchedEffect(text) {
         text.forEachIndexed { index, _ ->
             displayedText = text.substring(0, index + 1)
@@ -2548,45 +3017,50 @@ fun TypewriterText(
         }
         onComplete()
     }
-    
+
     Text(
-        text = displayedText,
-        modifier = modifier,
-        color = color,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        fontWeight = FontWeight.Normal
+            text = displayedText,
+            modifier = modifier,
+            color = color,
+            fontSize = 16.sp,
+            lineHeight = 24.sp,
+            fontWeight = FontWeight.Normal
     )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ModeChip(
-    name: String,
-    icon: String,
-    color: Color = MaterialTheme.colorScheme.primary,
-    isSelected: Boolean,
-    onClick: () -> Unit
+        name: String,
+        icon: String,
+        color: Color = MaterialTheme.colorScheme.primary,
+        isSelected: Boolean,
+        onClick: () -> Unit
 ) {
     val scale by animateFloatAsState(if (isSelected) 1.05f else 1f)
 
     Surface(
-        onClick = onClick,
-        modifier = Modifier.padding(vertical = 4.dp).graphicsLayer(scaleX = scale, scaleY = scale),
-        shape = RoundedCornerShape(16.dp),
-        color = if (isSelected) color.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        border = BorderStroke(1.dp, if (isSelected) color else Color.Transparent)
+            onClick = onClick,
+            modifier =
+                    Modifier.padding(vertical = 4.dp).graphicsLayer(scaleX = scale, scaleY = scale),
+            shape = RoundedCornerShape(16.dp),
+            color =
+                    if (isSelected) color.copy(alpha = 0.2f)
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            border = BorderStroke(1.dp, if (isSelected) color else Color.Transparent)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
         ) {
             Text(icon, fontSize = 16.sp, modifier = Modifier.padding(end = 8.dp))
             Text(
-                name,
-                fontSize = 13.sp,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                color = if (isSelected) color else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                    name,
+                    fontSize = 13.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    color =
+                            if (isSelected) color
+                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
             )
         }
     }

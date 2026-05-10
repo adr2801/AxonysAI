@@ -96,6 +96,13 @@ class MemoryManager:
 
         with self.get_conn() as conn:
             with conn.cursor() as cursor:
+                # Vérifier si ce fait existe déjà (déduplication)
+                cursor.execute(
+                    "SELECT COUNT(*) FROM user_facts WHERE user_id = %s AND fact = %s",
+                    (user_id, fact)
+                )
+                if cursor.fetchone()[0] > 0:
+                    return  # Déjà connu, on ne duplique pas
                 cursor.execute(
                     "INSERT INTO user_facts (user_id, fact, embedding) VALUES (%s, %s, %s)", 
                     (user_id, fact, embedding_str)
