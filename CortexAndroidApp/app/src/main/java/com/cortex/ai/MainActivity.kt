@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -228,6 +229,11 @@ class MainActivity : ComponentActivity() {
             }
             var activeNotification by remember {
                 mutableStateOf<JarvisNotification?>(null)
+            }
+            val coroutineScope = rememberCoroutineScope()
+            val onPickImage: ((Uri) -> Unit) -> Unit = { callback ->
+                onImageSelected = callback
+                imagePickerLauncher.launch("image/*")
             }
             
             // Heure du briefing
@@ -721,7 +727,7 @@ fun MainScreen(
             ) { tab ->
                 when (tab) {
                     0 -> PrioritizerScreen(iaPrioriseur, prioritizedTasks, onTasksChange, onImpromptuBriefing)
-                    1 -> JarvisScreen(JarvisChatMessages, googleAccount, currentUserId, lat, lng, onMessagesChange, onRefreshToken, isAutoReadEnabled, onAutoReadToggle)
+                    1 -> JarvisScreen(JarvisChatMessages, googleAccount, currentUserId, lat, lng, onMessagesChange, onRefreshToken, isAutoReadEnabled, onAutoReadToggle, onPickImage)
 
                     2 -> SettingsScreen(
                         themeMode,
@@ -2451,6 +2457,7 @@ fun TypewriterText(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ModeChip(
     name: String,
