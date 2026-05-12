@@ -205,6 +205,7 @@ class MainActivity : ComponentActivity() {
                 super.onCreate(savedInstanceState)
 
                 fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+                val lastAccount = GoogleSignIn.getLastSignedInAccount(this)
                 requestLocation()
 
                 // Activation de l'anticipation proactive
@@ -3813,8 +3814,7 @@ fun ModeChip(
                 shape = RoundedCornerShape(16.dp),
                 color =
                         if (isSelected) color.copy(alpha = 0.2f)
-                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                border = BorderStroke(1.dp, if (isSelected) color else Color.Transparent)
+                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         ) {
                 Row(
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),

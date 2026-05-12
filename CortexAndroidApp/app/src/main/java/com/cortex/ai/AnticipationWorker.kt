@@ -29,10 +29,11 @@ class AnticipationWorker(context: Context, params: WorkerParameters) : Coroutine
                 user_name = name
             ))
             
-            Log.d("JarvisAnticipate", "Analyse terminée: ${response.status}")
+            Log.d("JarvisAnticipate", "Analyse terminée. Status: ${response.status}. Notifications reçues: ${response.notifications?.size ?: 0}")
             
             // Si Jarvis a généré des notifications proactives
             response.notifications?.forEach { notif ->
+                Log.d("JarvisAnticipate", "Envoi d'une notification locale: ${notif.title}")
                 sendLocalNotification(notif.title, notif.message)
             }
             
