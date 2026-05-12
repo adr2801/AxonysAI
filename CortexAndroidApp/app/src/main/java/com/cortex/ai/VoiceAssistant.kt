@@ -7,6 +7,9 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.TextToSpeech
+import android.util.Log
+import java.util.Locale
 
 class VoiceAssistant(
     private val context: Context, 
@@ -25,7 +28,7 @@ class VoiceAssistant(
 
         textToSpeech = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                textToSpeech?.language = Locale.FRENCH
+                textToSpeech?.setLanguage(Locale.FRENCH)
                 textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {
                         onSpeakStatusChanged(true)
@@ -45,7 +48,7 @@ class VoiceAssistant(
     fun startListening() {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.FRENCH)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fr-FR")
             putExtra(RecognizerIntent.EXTRA_PROMPT, "Je vous écoute...")
         }
         speechRecognizer?.startListening(intent)

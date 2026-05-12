@@ -84,7 +84,6 @@ import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import com.google.gson.Gson
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
@@ -2026,14 +2025,12 @@ fun JarvisScreen(
                                 if (isLoading) {
                                         item {
                                                 JarvisOrb(
-                                                        isThinking =
-                                                                !isModelLoading &&
-                                                                        !isModelLaunching &&
-                                                                        !isOptimizing,
+                                                        isThinking = !isModelLoading && !isModelLaunching && !isOptimizing,
                                                         isToolRunning = false,
-                                                        isModelLoading =
-                                                                isModelLoading || isOptimizing,
+                                                        isModelLoading = isModelLoading || isOptimizing,
                                                         isModelLaunching = isModelLaunching,
+                                                        isListening = isListening,
+                                                        isSpeaking = isSpeaking,
                                                         baseColor = threadColor
                                                 )
                                         }
@@ -3414,6 +3411,8 @@ fun JarvisOrb(
         isToolRunning: Boolean = false,
         isModelLoading: Boolean = false,
         isModelLaunching: Boolean = false,
+        isListening: Boolean = false,
+        isSpeaking: Boolean = false,
         toolName: String? = null,
         baseColor: Color = MaterialTheme.colorScheme.primary
 ) {
@@ -3450,9 +3449,11 @@ fun JarvisOrb(
         // Couleur dynamique
         val orbColor =
                 when {
-                        isModelLoading -> Color(0xFF00BCD4) // Cyan pour le chargement du modèle
-                        isModelLaunching -> Color(0xFF4CAF50) // Vert pour le lancement API
-                        isToolRunning -> Color(0xFFFF9800) // Doré/Orange pour les outils
+                        isListening -> Color.Red // Micro actif
+                        isSpeaking -> Color(0xFFE91E63) // Jarvis parle
+                        isModelLoading -> Color(0xFF00BCD4)
+                        isModelLaunching -> Color(0xFF4CAF50)
+                        isToolRunning -> Color(0xFFFF9800)
                         else -> baseColor
                 }
 
