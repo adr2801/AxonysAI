@@ -12,3 +12,6 @@ mcp
 httpx
 tzdata
 psycopg2-binary
+matplotlib
+numpy
+pandas

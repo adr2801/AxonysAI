@@ -6,11 +6,14 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import android.speech.tts.TextToSpeech
-import android.util.Log
-import java.util.*
+import android.speech.tts.UtteranceProgressListener
 
-class VoiceAssistant(private val context: Context, private val onResult: (String) -> Unit) : RecognitionListener {
+class VoiceAssistant(
+    private val context: Context, 
+    private val onSpeakStatusChanged: (Boolean) -> Unit = {},
+    private val onListeningStatusChanged: (Boolean) -> Unit = {},
+    private val onResult: (String) -> Unit
+) : RecognitionListener {
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var textToSpeech: TextToSpeech? = null
@@ -23,6 +26,17 @@ class VoiceAssistant(private val context: Context, private val onResult: (String
         textToSpeech = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 textToSpeech?.language = Locale.FRENCH
+                textToSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {
+                        onSpeakStatusChanged(true)
+                    }
+                    override fun onDone(utteranceId: String?) {
+                        onSpeakStatusChanged(false)
+                    }
+                    override fun onError(utteranceId: String?) {
+                        onSpeakStatusChanged(false)
+                    }
+                })
                 isTtsReady = true
             }
         }
@@ -43,7 +57,9 @@ class VoiceAssistant(private val context: Context, private val onResult: (String
 
     fun speak(text: String) {
         if (isTtsReady) {
-            textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
+            val params = Bundle()
+            params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "jarvis_speech")
+            textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, params, "jarvis_speech")
         }
     }
 
@@ -54,12 +70,18 @@ class VoiceAssistant(private val context: Context, private val onResult: (String
     }
 
     // RecognitionListener callbacks
-    override fun onReadyForSpeech(params: Bundle?) { Log.d("VoiceAssistant", "Prêt") }
+    override fun onReadyForSpeech(params: Bundle?) { 
+        Log.d("VoiceAssistant", "Prêt") 
+        onListeningStatusChanged(true)
+    }
     override fun onBeginningOfSpeech() {}
     override fun onRmsChanged(rmsdB: Float) {}
     override fun onBufferReceived(buffer: ByteArray?) {}
-    override fun onEndOfSpeech() {}
+    override fun onEndOfSpeech() {
+        onListeningStatusChanged(false)
+    }
     override fun onError(error: Int) {
+        onListeningStatusChanged(false)
         val message = when (error) {
             SpeechRecognizer.ERROR_AUDIO -> "Erreur audio"
             SpeechRecognizer.ERROR_CLIENT -> "Erreur client"
@@ -74,6 +96,7 @@ class VoiceAssistant(private val context: Context, private val onResult: (String
     }
 
     override fun onResults(results: Bundle?) {
+        onListeningStatusChanged(false)
         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
         if (!matches.isNullOrEmpty()) {
             onResult(matches[0])

@@ -61,8 +61,29 @@ async def listen_web(url: str) -> str:
 @mcp.tool()
 async def execute_python(code: str) -> str:
     """LE LAB : Exécute du code Python et retourne le résultat. 
-    Idéal pour les maths, l'algorithmique (NSI) et les calculs complexes.
-    Utilise print() pour afficher le résultat final."""
+    Supporte matplotlib : si vous utilisez plt.show(), le graphique sera capturé et renvoyé.
+    Idéal pour les maths, l'algorithmique (NSI) et les calculs complexes."""
+    
+    # Injection pour capturer les graphiques matplotlib si utilisés
+    if "matplotlib" in code or "plt." in code:
+        code = """
+import matplotlib
+matplotlib.use('Agg') # Mode sans interface graphique
+import matplotlib.pyplot as plt
+import io, base64
+
+# --- Code original ---
+""" + code + """
+# --- Capture du graphique ---
+if plt.get_fignums():
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', bbox_inches='tight')
+    buf.seek(0)
+    img_str = base64.b64encode(buf.read()).decode()
+    print(f"\\n[IMAGE_DATA]{img_str}[/IMAGE_DATA]")
+    plt.close('all')
+"""
+
     try:
         process = await asyncio.create_subprocess_exec(
             sys.executable, "-c", code,
@@ -137,6 +158,25 @@ async def schedule_smart_reminder(user_id: str, title: str, message: str, schedu
     mm = MemoryManager()
     mm.schedule_notification(user_id, title, message, scheduled_time)
     return f"Rappel planifié pour {scheduled_time} : {title}"
+
+
+@mcp.tool()
+async def search_memory(query: str, top_k: int = 10) -> str:
+    """
+    Effectue une recherche sémantique approfondie dans les souvenirs de l'utilisateur.
+    Utilise la recherche vectorielle pour trouver les faits les plus pertinents.
+    """
+    from memory_manager import MemoryManager
+    from jarvis_engine import context
+    
+    user_id = context.user_id or "default"
+    mm = MemoryManager()
+    facts = mm.get_relevant_facts(user_id, current_query=query, top_k=top_k)
+    
+    if not facts:
+        return "Aucun souvenir pertinent trouvé pour cette recherche."
+    
+    return "Souvenirs trouvés :\n- " + "\n- ".join(facts)
 
 
 # --- OUTILS GMAIL ---

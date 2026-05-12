@@ -15,7 +15,8 @@ data class JarvisChatMessage(
     val isThinking: Boolean = false,
     val isToolRunning: Boolean = false,
     val currentTool: String? = null,
-    val isNew: Boolean = false
+    val isNew: Boolean = false,
+    val imageResult: String? = null
 )
 
 

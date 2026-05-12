@@ -22,7 +22,7 @@ data class ChatRequest(
     val image_base64: String? = null
 )
 
-data class ChatResponse(val response: String?, val text: String?)
+data class ChatResponse(val response: String?, val text: String?, val image_result: String? = null, val sentiment: String? = "CALM")
 data class GithubRelease(val tag_name: String, val html_url: String)
 data class HistoryItem(val text: String, val isUser: Boolean)
 data class HistoryResponse(val history: List<HistoryItem>)
@@ -125,6 +125,10 @@ interface JarvisApiService {
 
     @POST("/tasks/{user_id}/delete")
     suspend fun deleteTask(@Path("user_id") userId: String, @Body body: Map<String, Any?>): Any
+
+    @POST("/chat/stream")
+    @retrofit2.http.Streaming
+    suspend fun streamMessage(@Body request: ChatRequest): okhttp3.ResponseBody
 
     @POST("/chat/{user_id}/delete")
     suspend fun deleteMessage(@Path("user_id") userId: String, @Body body: Map<String, String?>): Any

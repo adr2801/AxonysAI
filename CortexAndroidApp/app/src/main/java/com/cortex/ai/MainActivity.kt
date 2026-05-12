@@ -58,6 +58,18 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -72,6 +84,9 @@ import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.google.gson.Gson
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -211,21 +226,23 @@ class MainActivity : ComponentActivity() {
                 // Activation de l'anticipation proactive
                 toggleAnticipationWorker(true)
 
-                // Demande de permission notification et audio pour Android 13+
+                // Demande de permissions
+                val permissionsToRequest = mutableListOf<String>()
+                
+                // Micro (Nécessaire pour la voix dès Android 6.0)
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                    permissionsToRequest.add(Manifest.permission.RECORD_AUDIO)
+                }
+                
+                // Notifications (Nécessaire à partir d'Android 13)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        val permissions =
-                                arrayOf(
-                                        Manifest.permission.POST_NOTIFICATIONS,
-                                        Manifest.permission.RECORD_AUDIO
-                                )
-                        val needed =
-                                permissions.filter {
-                                        ContextCompat.checkSelfPermission(this, it) !=
-                                                PackageManager.PERMISSION_GRANTED
-                                }
-                        if (needed.isNotEmpty()) {
-                                requestPermissionLauncher.launch(needed.toTypedArray())
-                        }
+                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                        permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
+                
+                if (permissionsToRequest.isNotEmpty()) {
+                    requestPermissionLauncher.launch(permissionsToRequest.toTypedArray())
                 }
 
                 val iaPrioriseur = MlpPrioriseur()
@@ -1476,8 +1493,16 @@ fun JarvisScreen(
         val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
         val listState = rememberLazyListState()
 
+        var isSpeaking by remember { mutableStateOf(false) }
+        var isListening by remember { mutableStateOf(false) }
+
         val voiceAssistant = remember {
-                VoiceAssistant(context) { recognizedText -> input = recognizedText }
+                VoiceAssistant(
+                        context = context,
+                        onSpeakStatusChanged = { isSpeaking = it },
+                        onListeningStatusChanged = { isListening = it },
+                        onResult = { recognizedText -> input = recognizedText }
+                )
         }
 
         DisposableEffect(Unit) { onDispose { voiceAssistant.destroy() } }
@@ -1540,16 +1565,22 @@ fun JarvisScreen(
                         listState.animateScrollToItem(currentMessages.size - 1)
         }
 
-        // Couleur d'accent dynamique : Gem > Thread > Défaut
+        var currentSentiment by remember { mutableStateOf("CALM") }
+
+        // Couleur d'accent dynamique : Gem > Sentiment > Défaut
         val gemColorHex = availableModes.find { it["name"] == currentMode }?.get("color")
         val gemColor =
                 if (gemColorHex != null) Color(android.graphics.Color.parseColor(gemColorHex))
                 else null
 
-        val threadColor =
-                gemColor
-                        ?: (if (currentThreadId == "main") MaterialTheme.colorScheme.primary
-                        else Color(0xFF9575CD))
+        val sentimentColor = when(currentSentiment) {
+                "STRESS" -> Color(0xFFFF5252)    // Rouge vif
+                "FATIGUE" -> Color(0xFFB39DDB)   // Lavande doux
+                "ENTHUSIASM" -> Color(0xFF00E676) // Vert électrique
+                else -> MaterialTheme.colorScheme.primary
+        }
+
+        val threadColor = gemColor ?: sentimentColor
 
         // Dialogue de création de nouveau thread
         if (showNewThreadDialog) {
@@ -1932,20 +1963,11 @@ fun JarvisScreen(
                                                                         )
                                                 ) {
                                                         if (msg.isUser || !msg.isNew) {
-                                                                Text(
-                                                                        msg.text,
-                                                                        modifier =
-                                                                                Modifier.padding(
-                                                                                        horizontal =
-                                                                                                18.dp,
-                                                                                        vertical =
-                                                                                                14.dp
-                                                                                ),
+                                                                FormattedMessage(
+                                                                        text = msg.text,
+                                                                        isUser = msg.isUser,
                                                                         color = textColor,
-                                                                        fontSize = 16.sp,
-                                                                        lineHeight = 24.sp,
-                                                                        fontWeight =
-                                                                                FontWeight.Normal
+                                                                        imageResult = msg.imageResult
                                                                 )
                                                         } else {
                                                                 // Effet de typing pour les nouveaux
@@ -2113,14 +2135,61 @@ fun JarvisScreen(
                                 shadowElevation = 12.dp,
                                 color = MaterialTheme.colorScheme.surface
                         ) {
-                                Row(
-                                        modifier =
-                                                Modifier.padding(
-                                                        horizontal = 8.dp,
-                                                        vertical = 6.dp
-                                                ),
-                                        verticalAlignment = Alignment.CenterVertically
-                                ) {
+                                Column {
+                                        // Aperçu de l'image sélectionnée
+                                        androidx.compose.animation.AnimatedVisibility(
+                                                visible = selectedImageUri != null,
+                                                enter = expandVertically() + fadeIn(),
+                                                exit = shrinkVertically() + fadeOut()
+                                        ) {
+                                                Box(
+                                                        modifier = Modifier
+                                                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                                                .size(100.dp)
+                                                ) {
+                                                        Surface(
+                                                                shape = RoundedCornerShape(12.dp),
+                                                                shadowElevation = 4.dp,
+                                                                border = BorderStroke(2.dp, threadColor.copy(alpha = 0.5f))
+                                                        ) {
+                                                                AsyncImage(
+                                                                        model = ImageRequest.Builder(androidx.compose.ui.platform.LocalContext.current)
+                                                                                .data(selectedImageUri)
+                                                                                .crossfade(true)
+                                                                                .build(),
+                                                                        contentDescription = "Aperçu image",
+                                                                        modifier = Modifier.fillMaxSize(),
+                                                                        contentScale = ContentScale.Crop
+                                                                )
+                                                        }
+                                                        
+                                                        // Bouton supprimer l'image
+                                                        IconButton(
+                                                                onClick = { selectedImageUri = null },
+                                                                modifier = Modifier
+                                                                        .align(Alignment.TopEnd)
+                                                                        .offset(x = 8.dp, y = (-8).dp)
+                                                                        .size(24.dp)
+                                                                        .background(Color.Red, CircleShape)
+                                                        ) {
+                                                                Icon(
+                                                                        Icons.Default.Close,
+                                                                        contentDescription = "Supprimer",
+                                                                        tint = Color.White,
+                                                                        modifier = Modifier.size(16.dp)
+                                                                )
+                                                        }
+                                                }
+                                        }
+                                        
+                                        Row(
+                                                modifier =
+                                                        Modifier.padding(
+                                                                horizontal = 8.dp,
+                                                                vertical = 6.dp
+                                                        ),
+                                                verticalAlignment = Alignment.CenterVertically
+                                        ) {
                                         var showTools by remember { mutableStateOf(false) }
 
                                         // Bouton d'expansion des outils (+)
@@ -2384,106 +2453,69 @@ fun JarvisScreen(
                                                                                 )
                                                                                         token =
                                                                                                 freshToken
-                                                                                val response =
-                                                                                        JarvisApiClient
-                                                                                                .apiService
-                                                                                                .sendMessage(
-                                                                                                        ChatRequest(
-                                                                                                                userMsg,
-                                                                                                                token,
-                                                                                                                currentUserName,
-                                                                                                                lat,
-                                                                                                                lng,
-                                                                                                                currentThreadId,
-                                                                                                                mode =
-                                                                                                                        currentMode,
-                                                                                                                image_base64 =
-                                                                                                                        selectedImageBase64
-                                                                                                        )
-                                                                                                )
-                                                                                selectedImageBase64 =
-                                                                                        null
-                                                                                isModelLaunching =
-                                                                                        false
-
-                                                                                val rawText =
-                                                                                        response.response
-                                                                                                ?: response.text
-                                                                                                        ?: "Aucune réponse."
-                                                                                // Nettoyage
-                                                                                // agressif de
-                                                                                // TOUTES les
-                                                                                // balises
-                                                                                // techniques
-                                                                                // [DATE], [HEURE],
-                                                                                // [CONTEXTE], etc.
-                                                                                val cleanText =
-                                                                                        rawText.replace(
-                                                                                                        Regex(
-                                                                                                                "\\[(CONTEXTE|DATE|HEURE|USER|INFO).*?\\]\\n?",
-                                                                                                                RegexOption
-                                                                                                                        .DOT_MATCHES_ALL
-                                                                                                        ),
-                                                                                                        ""
-                                                                                                )
-                                                                                                .replace(
-                                                                                                        Regex(
-                                                                                                                "\\[.*?\\]"
-                                                                                                        ),
-                                                                                                        ""
-                                                                                                ) // Sécurité supplémentaire pour toute
-                                                                                                // balise [ ]
-                                                                                                .trim()
-
-                                                                                haptic.performHapticFeedback(
-                                                                                        androidx.compose
-                                                                                                .ui
-                                                                                                .hapticfeedback
-                                                                                                .HapticFeedbackType
-                                                                                                .TextHandleMove
-                                                                                )
-
-                                                                                val jarvisMsg =
-                                                                                        JarvisChatMessage(
-                                                                                                text =
-                                                                                                        cleanText,
-                                                                                                isUser =
-                                                                                                        false,
-                                                                                                isError =
-                                                                                                        false,
-                                                                                                isNew =
-                                                                                                        true
+                                                                                val responseBody = JarvisApiClient.apiService.streamMessage(
+                                                                                        ChatRequest(
+                                                                                                userMsg,
+                                                                                                token,
+                                                                                                currentUserName,
+                                                                                                lat,
+                                                                                                lng,
+                                                                                                currentThreadId,
+                                                                                                mode = currentMode,
+                                                                                                image_base64 = selectedImageBase64
                                                                                         )
-
-                                                                                // Lecture vocale
-                                                                                // automatique si
-                                                                                // activée
-                                                                                if (isAutoReadEnabled
-                                                                                ) {
-                                                                                        voiceAssistant
-                                                                                                ?.speak(
-                                                                                                        cleanText
+                                                                                )
+                                                                                selectedImageBase64 = null
+                                                                                isModelLaunching = false
+                                                                                
+                                                                                val gson = Gson()
+                                                                                val reader = BufferedReader(InputStreamReader(responseBody.byteStream()))
+                                                                                var fullText = ""
+                                                                                
+                                                                                val initialJarvisMsg = JarvisChatMessage(text = "", isUser = false, isThinking = true)
+                                                                                var streamWithJarvis = updatedWithUser + initialJarvisMsg
+                                                                                
+                                                                                reader.use { br ->
+                                                                                    br.forEachLine { line ->
+                                                                                        if (line.startsWith("data: ")) {
+                                                                                            val json = line.substring(6)
+                                                                                            val data = gson.fromJson(json, Map::class.java)
+                                                                                            
+                                                                                            if (data["chunk"] != null) {
+                                                                                                fullText += data["chunk"] as String
+                                                                                                val updatedJarvisMsg = initialJarvisMsg.copy(text = fullText, isThinking = false)
+                                                                                                streamWithJarvis = updatedWithUser + updatedJarvisMsg
+                                                                                                
+                                                                                                val updatedStream = threadMessages.toMutableMap()
+                                                                                                updatedStream[currentThreadId] = streamWithJarvis
+                                                                                                threadMessages = updatedStream
+                                                                                                if (currentThreadId == "main") onMessagesChange(streamWithJarvis)
+                                                                                            }
+                                                                                            
+                                                                                            if (data["done"] == true) {
+                                                                                                val finalSentiment = data["sentiment"] as? String ?: "CALM"
+                                                                                                val finalImage = data["image_result"] as? String
+                                                                                                currentSentiment = finalSentiment
+                                                                                                
+                                                                                                val finalJarvisMsg = initialJarvisMsg.copy(
+                                                                                                    text = fullText,
+                                                                                                    isThinking = false,
+                                                                                                    imageResult = finalImage,
+                                                                                                    isNew = true
                                                                                                 )
+                                                                                                streamWithJarvis = updatedWithUser + finalJarvisMsg
+                                                                                                
+                                                                                                val updatedFinal = threadMessages.toMutableMap()
+                                                                                                updatedFinal[currentThreadId] = streamWithJarvis
+                                                                                                threadMessages = updatedFinal
+                                                                                                if (currentThreadId == "main") onMessagesChange(streamWithJarvis)
+                                                                                                
+                                                                                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                                                                                if (isAutoReadEnabled) voiceAssistant?.speak(fullText)
+                                                                                            }
+                                                                                        }
+                                                                                    }
                                                                                 }
-
-                                                                                val withResponse =
-                                                                                        updatedWithUser +
-                                                                                                jarvisMsg
-
-                                                                                val updatedFinal =
-                                                                                        threadMessages
-                                                                                                .toMutableMap()
-                                                                                updatedFinal[
-                                                                                        currentThreadId] =
-                                                                                        withResponse
-                                                                                threadMessages =
-                                                                                        updatedFinal
-                                                                                if (currentThreadId ==
-                                                                                                "main"
-                                                                                )
-                                                                                        onMessagesChange(
-                                                                                                withResponse
-                                                                                        )
                                                                         } catch (e: Exception) {
                                                                                 val errMsg =
                                                                                         JarvisChatMessage(
@@ -2546,6 +2578,7 @@ fun JarvisScreen(
                                                         }
                                                 }
                                         }
+                                        }
                                 }
                         }
                 }
@@ -2600,8 +2633,8 @@ fun JarvisScreen(
                                                                         0.1f
                                                                 else 0.97f
                                                 ),
-                                        shadowElevation = 16.dp,
-                                        tonalElevation = 8.dp
+                                        shadowElevation = 0.dp,
+                                        tonalElevation = 0.dp
                                 ) {
                                         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                                                 Text(
@@ -3566,6 +3599,18 @@ fun JarvisOrb(
                                         )
                                 }
                         }
+                        
+                        // Indicateur de micro actif
+                        if (isListening) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .align(Alignment.BottomCenter)
+                                    .offset(y = 20.dp)
+                                    .background(Color.Red, CircleShape)
+                                    .animateContentSize()
+                            )
+                        }
 
                         if (isToolRunning) {
                                 CircularProgressIndicator(
@@ -3767,6 +3812,104 @@ fun CreateModeDialog(onDismiss: () -> Unit, onCreate: (String, String, String, S
                 dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } }
         )
 }
+
+@Composable
+fun CodeBlock(code: String, color: Color) {
+    val clipboardManager = LocalClipboardManager.current
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xFF1E1E1E),
+        border = BorderStroke(0.5.dp, color.copy(alpha = 0.3f))
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Python",
+                    fontSize = 10.sp,
+                    color = color.copy(alpha = 0.7f),
+                    fontWeight = FontWeight.Bold
+                )
+                IconButton(
+                    onClick = { clipboardManager.setText(AnnotatedString(code.trim())) },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Text("📋", fontSize = 12.sp)
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Box(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                Text(
+                    text = code.trim(),
+                    color = Color(0xFFCE9178),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun FormattedMessage(text: String, isUser: Boolean, color: Color, imageResult: String? = null) {
+    val parts = text.split("```")
+    Column {
+        parts.forEachIndexed { index, part ->
+            if (index % 2 == 0) {
+                if (part.isNotBlank()) {
+                    Text(
+                        text = part.trim(),
+                        modifier = Modifier.padding(16.dp),
+                        color = color,
+                        fontSize = 16.sp,
+                        lineHeight = 24.sp
+                    )
+                }
+            } else {
+                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    CodeBlock(code = part.trim(), color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+
+        // Affichage du graphique/image si présent
+        imageResult?.let { base64 ->
+            Box(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.White) // Fond blanc pour les graphiques souvent sur fond blanc
+            ) {
+                val bitmap = remember(base64) {
+                    try {
+                        val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+                
+                bitmap?.let {
+                    androidx.compose.foundation.Image(
+                        bitmap = it.asImageBitmap(),
+                        contentDescription = "Graphique généré",
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+            }
+        }
+    }
+}
+
 
 @Composable
 fun TypewriterText(

@@ -80,7 +80,7 @@ class MemoryManager:
             conn.commit()
 
     def save_fact(self, user_id, fact):
-        embedding_str = "[]"
+        embedding = None
         try:
             from google import genai
             api_key = os.getenv("GEMINI_API_KEY")
@@ -90,43 +90,44 @@ class MemoryManager:
                     model='gemini-embedding-2',
                     contents=fact,
                 )
-                embedding_str = json.dumps(response.embeddings[0].values)
+                embedding = response.embeddings[0].values
         except Exception as e:
             print(f"Erreur lors de l'embedding du fait : {e}")
 
         with self.get_conn() as conn:
             with conn.cursor() as cursor:
-                # Vérifier si ce fait existe déjà (déduplication)
+                # Vérifier si ce fait existe déjà
                 cursor.execute(
                     "SELECT COUNT(*) FROM user_facts WHERE user_id = %s AND fact = %s",
                     (user_id, fact)
                 )
                 if cursor.fetchone()[0] > 0:
-                    return  # Déjà connu, on ne duplique pas
-                cursor.execute(
-                    "INSERT INTO user_facts (user_id, fact, embedding) VALUES (%s, %s, %s)", 
-                    (user_id, fact, embedding_str)
-                )
+                    return
+                
+                if embedding:
+                    cursor.execute(
+                        "INSERT INTO user_facts (user_id, fact, embedding) VALUES (%s, %s, %s)", 
+                        (user_id, fact, embedding)
+                    )
+                else:
+                    cursor.execute(
+                        "INSERT INTO user_facts (user_id, fact) VALUES (%s, %s)", 
+                        (user_id, fact)
+                    )
             conn.commit()
 
     def get_relevant_facts(self, user_id, current_query=None, top_k=5):
-        with self.get_conn() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT fact, embedding FROM user_facts WHERE user_id = %s", (user_id,))
-                rows = cursor.fetchall()
-
-        if not rows:
-            return []
-
         if not current_query:
-            return [row[0] for row in rows[-top_k:]]
+            with self.get_conn() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT fact FROM user_facts WHERE user_id = %s ORDER BY timestamp DESC LIMIT %s", (user_id, top_k))
+                    return [row[0] for row in cursor.fetchall()]
 
         try:
-            import math
             from google import genai
             api_key = os.getenv("GEMINI_API_KEY")
             if not api_key:
-                return [row[0] for row in rows[-top_k:]]
+                return []
 
             client = genai.Client(api_key=api_key)
             response = client.models.embed_content(
@@ -135,29 +136,20 @@ class MemoryManager:
             )
             query_emb = response.embeddings[0].values
 
-            def cosine_sim(v1, v2):
-                dot = sum(x * y for x, y in zip(v1, v2))
-                n1 = math.sqrt(sum(x * x for x in v1))
-                n2 = math.sqrt(sum(x * x for x in v2))
-                return dot / (n1 * n2) if n1 and n2 else 0.0
-
-            scored_facts = []
-            for fact, emb_str in rows:
-                if emb_str and emb_str != "[]":
-                    try:
-                        emb = json.loads(emb_str)
-                        score = cosine_sim(query_emb, emb)
-                        scored_facts.append((score, fact))
-                        continue
-                    except:
-                        pass
-                scored_facts.append((0.0, fact))
-
-            scored_facts.sort(key=lambda x: x[0], reverse=True)
-            return [fact for score, fact in scored_facts[:top_k]]
+            with self.get_conn() as conn:
+                with conn.cursor() as cursor:
+                    # Recherche par similarité cosinus directe en SQL (opérateur <=> pour distance cosinus)
+                    cursor.execute("""
+                        SELECT fact 
+                        FROM user_facts 
+                        WHERE user_id = %s AND embedding IS NOT NULL
+                        ORDER BY embedding <=> %s::vector
+                        LIMIT %s
+                    """, (user_id, query_emb, top_k))
+                    return [row[0] for row in cursor.fetchall()]
         except Exception as e:
-            print(f"Erreur recherche sémantique : {e}")
-            return [row[0] for row in rows[-top_k:]]
+            print(f"Erreur recherche sémantique SQL : {e}")
+            return []
 
     def get_all_facts(self, user_id):
         with self.get_conn() as conn:

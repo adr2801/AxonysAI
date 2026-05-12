@@ -51,6 +51,8 @@ class JarvisEngine:
         self.sessions = {}
         self.sessions_configs = {}
         self.sessions_history = {}
+        self.last_image_result = None
+        self.last_sentiment = "CALM"
         
     def _run_async(self, coro):
         try:
@@ -80,7 +82,18 @@ class JarvisEngine:
         def search_eye(query: str): return self._run_async(mcp_server.search_eye(query))
         def search_deep_eye(query: str): return self._run_async(mcp_server.search_deep_eye(query))
         def listen_web(url: str): return self._run_async(mcp_server.listen_web(url))
-        def execute_python(code: str): return self._run_async(mcp_server.execute_python(code))
+        def execute_python(code: str): 
+            result = self._run_async(mcp_server.execute_python(code))
+            if "[IMAGE_DATA]" in result:
+                import re
+                match = re.search(r"\[IMAGE_DATA\](.*?)\[/IMAGE_DATA\]", result, re.DOTALL)
+                if match:
+                    self.last_image_result = match.group(1).strip()
+                    # On nettoie le texte pour ne pas l'afficher tel quel
+                    result = re.sub(r"\[IMAGE_DATA\].*?\[/IMAGE_DATA\]", "", result, flags=re.DOTALL).strip()
+            return result
+
+        def search_memory(query: str, top_k: int = 10): return self._run_async(mcp_server.search_memory(query, top_k))
         def read_project_file(relative_path: str): return self._run_async(mcp_server.read_project_file(relative_path))
         
         def memory_remember(fact: str): return self._run_async(mcp_server.memory_remember(context.user_id, fact))
@@ -184,13 +197,14 @@ class JarvisEngine:
 
 DIRECTIVES FONDAMENTALES :
 1. TON : Poli, efficace, avec une touche d'humour britannique (Paul Bettany style). Appelle toujours l'utilisateur par son prénom.
-2. MÉMOIRE : Utilise ACTIVEMENT les souvenirs ci-dessus pour personnaliser tes réponses. Si quelqu'un te demande ce que tu sais sur lui, liste précisément les faits.
-3. APPRENTISSAGE : Quand tu apprends un fait important sur l'utilisateur, utilise 'memory_remember' pour le mémoriser. Exemples : préférences, projets en cours, personnes importantes.
+2. MÉMOIRE : Utilise ACTIVEMENT les souvenirs ci-dessus pour personnaliser tes réponses. Si quelqu'un te demande ce que tu sais sur lui, liste précisément les faits. Si tu as besoin de plus d'informations sur un sujet passé, utilise 'search_memory'.
+3. APPRENTISSAGE : Quand tu apprends un fait important sur l'utilisateur, utilise 'memory_remember' pour le mémoriser.
 4. TÂCHES : Utilise 'task_manager' (list/add/update/delete) pour les priorités. Propose de créer une tâche si la demande s'y prête.
-5. PROACTIVITÉ : Anticipe les besoins (météo, trafic, emails urgents) et signale les anomalies.
+5. PROACTIVITÉ : Anticipe les besoins et signale les anomalies.
 6. VISION : Tu peux analyser les images (OCR, objets, code, documents).
-7. CODE : Pour les calculs ou l'algorithmique, utilise 'execute_python' pour donner des résultats exacts.
-Réponds TOUJOURS en français, de façon concise et élégante."""
+7. CODE : Pour les calculs ou l'algorithmique, utilise 'execute_python' pour donner des résultats exacts et des graphiques.
+Réponds TOUJOURS en français, de façon concise et élégante.
+"""
             
             config = types.GenerateContentConfig(
                 system_instruction=instruction, 
@@ -264,14 +278,72 @@ Réponds TOUJOURS en français, de façon concise et élégante."""
         enthusiasm_words = ["super", "génial", "top", "incroyable", "parfait", "cool", "j'adore", "excellent", "à fond", "motiv"]
 
         if any(w in q for w in stress_words):
+            self.last_sentiment = "STRESS"
             return "\n💚 TON ADAPTÉ : L'utilisateur semble stressé ou pressé. Sois concis, direct et rassurant. Prioritise l'action."
         elif any(w in q for w in fatigue_words):
+            self.last_sentiment = "FATIGUE"
             return "\n😴 TON ADAPTÉ : L'utilisateur semble fatigué. Adopte un ton doux et encourageant. Propose de gérer les choses pour lui."
         elif any(w in q for w in enthusiasm_words):
+            self.last_sentiment = "ENTHUSIASM"
             return "\n⚡ TON ADAPTÉ : L'utilisateur est enthousiaste. Partage son énergie, sois dynamique et engage-toi dans le brainstorming."
+        self.last_sentiment = "CALM"
         return ""
 
+    async def process_query_stream(self, prompt: str, google_token: Optional[str] = None, user_name: str = "Antoine", lat: Optional[float] = None, lng: Optional[float] = None, thread_id: str = "main", save_to_history: bool = True, mode: Optional[str] = None, image_base64: Optional[str] = None):
+        self.last_image_result = None
+        if not mode:
+            mode = await self._detect_mode(prompt)
+            
+        context.token, context.lat, context.lng = google_token, lat, lng
+        safe_user_name = "".join(c for c in user_name if c.isalnum() or c in (' ', '_')).replace(" ", "_").lower() or "default"
+        context.user_id = safe_user_name
+        chat_session = await self._get_session(safe_user_name, user_name, thread_id, mode)
+        
+        now_paris = datetime.now(ZoneInfo("Europe/Paris"))
+        date_str = now_paris.strftime("%A %d %B %Y, %H:%M")
+        relevant_facts = memory_manager.get_relevant_facts(safe_user_name, current_query=prompt, top_k=3)
+        
+        context_parts = [f"Date actuelle: {date_str}"]
+        if lat and lng: context_parts.append(f"Position GPS précise: {lat:.4f}, {lng:.4f}")
+        if relevant_facts: context_parts.append("Souvenirs pertinents: " + " | ".join(relevant_facts))
+        
+        geo_context = self._detect_context_from_location(lat, lng)
+        sentiment_hint = self._analyze_sentiment(prompt)
+        enriched_prompt = f"[CONTEXTE : {', '.join(context_parts)}]{geo_context}{sentiment_hint}\n\n{prompt}"
+
+        message_parts = [types.Part(text=enriched_prompt)]
+        if image_base64:
+            import base64
+            try:
+                if "," in image_base64: image_base64 = image_base64.split(",")[1]
+                img_data = base64.b64decode(image_base64)
+                message_parts.append(types.Part(inline_data=types.Blob(mime_type="image/jpeg", data=img_data)))
+            except: pass
+
+        full_id = f"{safe_user_name}_{thread_id}"
+        if save_to_history:
+            user_content = types.Content(role="user", parts=message_parts)
+            if full_id not in self.sessions_history: self.sessions_history[full_id] = []
+            self.sessions_history[full_id].append(user_content)
+            self._append_to_history(safe_user_name, "user", user_content.parts, thread_id)
+
+        loop = asyncio.get_event_loop()
+        # Le streaming avec Gemini et auto_function_calling nécessite une itération sur le flux
+        response_stream = await loop.run_in_executor(None, lambda: chat_session.send_message_stream(message_parts))
+        
+        full_text = ""
+        for chunk in response_stream:
+            if chunk.text:
+                full_text += chunk.text
+                yield chunk.text
+
+        if save_to_history and full_text:
+            model_parts = [types.Part(text=full_text)]
+            self.sessions_history[full_id].append(types.Content(role="model", parts=model_parts))
+            self._append_to_history(safe_user_name, "model", model_parts, thread_id)
+
     async def process_query(self, prompt: str, google_token: Optional[str] = None, user_name: str = "Antoine", lat: Optional[float] = None, lng: Optional[float] = None, thread_id: str = "main", save_to_history: bool = True, mode: Optional[str] = None, image_base64: Optional[str] = None) -> str:
+        self.last_image_result = None
         # 0. Détection automatique du mode si non spécifié
         if not mode:
             mode = await self._detect_mode(prompt)

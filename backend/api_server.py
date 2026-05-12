@@ -66,6 +66,32 @@ class TaskRequest(BaseModel):
 async def root():
     return {"status": "Online", "message": "Jarvis Native Server is running!"}
 
+from fastapi.responses import StreamingResponse
+
+@app.post("/chat/stream")
+async def chat_stream(request: ChatRequest):
+    async def event_generator():
+        try:
+            async for chunk in jarvis.process_query_stream(
+                prompt=request.prompt,
+                google_token=request.google_token,
+                user_name=request.user_name,
+                lat=request.lat,
+                lng=request.lng,
+                thread_id=request.thread_id,
+                mode=request.mode,
+                image_base64=request.image_base64
+            ):
+                # Format SSE
+                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+            
+            # Envoi final avec métadonnées (image_result, sentiment)
+            yield f"data: {json.dumps({'done': True, 'image_result': jarvis.last_image_result, 'sentiment': jarvis.last_sentiment})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 @app.post("/chat")
 async def chat(request: ChatRequest):
     try:
@@ -84,7 +110,11 @@ async def chat(request: ChatRequest):
 
 
         
-        return {"response": response_text}
+        return {
+            "response": response_text, 
+            "image_result": jarvis.last_image_result,
+            "sentiment": jarvis.last_sentiment
+        }
     
     except Exception as e:
         import traceback
