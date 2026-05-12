@@ -270,7 +270,7 @@ class MainActivity : ComponentActivity() {
                                 }
                         } else listOf<TaskItem>()
 
-                val lastAccount = GoogleSignIn.getLastSignedInAccount(this)
+
 
                 setContent {
                         val context = androidx.compose.ui.platform.LocalContext.current
