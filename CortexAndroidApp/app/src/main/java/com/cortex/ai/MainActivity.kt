@@ -470,7 +470,7 @@ class MainActivity : ComponentActivity() {
                                                 prioritizedTasks = prioritizedTasks,
                                                 googleAccount = googleAccount,
                                                 currentUserId = currentUserId,
-                                                currentUserName = currentUserName,
+                                                currentUserName = currentUserId,
                                                 lat = currentLatitude,
                                                 lng = currentLongitude,
                                                 onThemeChange = {
@@ -2437,45 +2437,35 @@ fun JarvisScreen(
                                                                         }
 
                                                                         try {
-                                                                                val prefs =
-                                                                                        context.getSharedPreferences(
-                                                                                                "CortexPrefs",
-                                                                                                Context.MODE_PRIVATE
-                                                                                        )
-                                                                                var token =
-                                                                                        prefs.getString(
-                                                                                                "google_id_token",
-                                                                                                null
-                                                                                        )
-                                                                                val freshToken =
-                                                                                        onRefreshToken()
-                                                                                if (freshToken !=
-                                                                                                null
-                                                                                )
-                                                                                        token =
-                                                                                                freshToken
-                                                                                val responseBody = JarvisApiClient.apiService.streamMessage(
+                                                                                val prefs = context.getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
+                                                                                var token = prefs.getString("google_id_token", null)
+                                                                                val responseBody = withContext(Dispatchers.IO) {
+                                                                                    val freshToken = onRefreshToken()
+                                                                                    if (freshToken != null) token = freshToken
+                                                                                    JarvisApiClient.apiService.streamMessage(
                                                                                         ChatRequest(
-                                                                                                userMsg,
-                                                                                                token,
-                                                                                                currentUserName,
-                                                                                                lat,
-                                                                                                lng,
-                                                                                                currentThreadId,
-                                                                                                mode = currentMode,
-                                                                                                image_base64 = selectedImageBase64
+                                                                                            userMsg,
+                                                                                            token,
+                                                                                            currentUserId,
+                                                                                            lat,
+                                                                                            lng,
+                                                                                            currentThreadId,
+                                                                                            mode = currentMode,
+                                                                                            image_base64 = selectedImageBase64
                                                                                         )
-                                                                                )
+                                                                                    )
+                                                                                }
                                                                                 selectedImageBase64 = null
                                                                                 isModelLaunching = false
-                                                                                
+                                                                                 
                                                                                 val gson = Gson()
-                                                                                val reader = BufferedReader(InputStreamReader(responseBody.byteStream()))
+                                                                                val reader = withContext(Dispatchers.IO) {
+                                                                                    BufferedReader(InputStreamReader(responseBody.byteStream()))
+                                                                                }
                                                                                 var fullText = ""
-                                                                                
                                                                                 val initialJarvisMsg = JarvisChatMessage(text = "", isUser = false, isThinking = true)
                                                                                 var streamWithJarvis = updatedWithUser + initialJarvisMsg
-                                                                                
+
                                                                                 reader.use { br ->
                                                                                     br.forEachLine { line ->
                                                                                         if (line.startsWith("data: ")) {
