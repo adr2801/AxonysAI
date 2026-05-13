@@ -1485,6 +1485,8 @@ fun JarvisScreen(
         var isModelLoading by remember { mutableStateOf(false) }
         var isModelLaunching by remember { mutableStateOf(false) }
         var isOptimizing by remember { mutableStateOf(false) }
+        var isToolRunning by remember { mutableStateOf(false) }
+        var runningToolName by remember { mutableStateOf<String?>(null) }
         var availableModes by remember { mutableStateOf<List<Map<String, String>>>(emptyList()) }
         var currentMode by remember { mutableStateOf<String?>(null) }
         val coroutineScope = rememberCoroutineScope()
@@ -1576,10 +1578,10 @@ fun JarvisScreen(
                 "STRESS" -> Color(0xFFFF5252)    // Rouge vif
                 "FATIGUE" -> Color(0xFFB39DDB)   // Lavande doux
                 "ENTHUSIASM" -> Color(0xFF00E676) // Vert électrique
-                else -> MaterialTheme.colorScheme.primary
+                else -> Color.Transparent
         }
 
-        val threadColor = gemColor ?: sentimentColor
+        val threadColor = gemColor ?: (if (sentimentColor != Color.Transparent) sentimentColor else MaterialTheme.colorScheme.primary)
 
         // Dialogue de création de nouveau thread
         if (showNewThreadDialog) {
@@ -2025,13 +2027,15 @@ fun JarvisScreen(
                                 if (isLoading) {
                                         item {
                                                 JarvisOrb(
-                                                        isThinking = !isModelLoading && !isModelLaunching && !isOptimizing,
-                                                        isToolRunning = false,
+                                                        isThinking = !isModelLoading && !isModelLaunching && !isOptimizing && !isToolRunning,
+                                                        isToolRunning = isToolRunning,
+                                                        toolName = runningToolName,
                                                         isModelLoading = isModelLoading || isOptimizing,
                                                         isModelLaunching = isModelLaunching,
                                                         isListening = isListening,
                                                         isSpeaking = isSpeaking,
-                                                        baseColor = threadColor
+                                                        baseColor = threadColor,
+                                                        moodColor = sentimentColor
                                                 )
                                         }
                                 }
@@ -2477,8 +2481,12 @@ fun JarvisScreen(
                                                                                         if (line.startsWith("data: ")) {
                                                                                             val json = line.substring(6)
                                                                                             val data = gson.fromJson(json, Map::class.java)
+                                                                                            if (data["sentiment"] != null) {
+                                                                                                currentSentiment = data["sentiment"] as String
+                                                                                            }
                                                                                             
                                                                                             if (data["chunk"] != null) {
+                                                                                                isToolRunning = false // Cacher l'outil si du texte arrive
                                                                                                 fullText += data["chunk"] as String
                                                                                                 val updatedJarvisMsg = initialJarvisMsg.copy(text = fullText, isThinking = false)
                                                                                                 streamWithJarvis = updatedWithUser + updatedJarvisMsg
@@ -2489,7 +2497,15 @@ fun JarvisScreen(
                                                                                                 if (currentThreadId == "main") onMessagesChange(streamWithJarvis)
                                                                                             }
                                                                                             
+                                                                                            if (data["tool_use"] != null) {
+                                                                                                isToolRunning = true
+                                                                                                runningToolName = data["tool_use"] as String
+                                                                                                isOptimizing = false
+                                                                                            }
+                                                                                            
                                                                                             if (data["done"] == true) {
+                                                                                                isToolRunning = false
+                                                                                                runningToolName = null
                                                                                                 val finalSentiment = data["sentiment"] as? String ?: "CALM"
                                                                                                 val finalImage = data["image_result"] as? String
                                                                                                 currentSentiment = finalSentiment
@@ -3414,7 +3430,8 @@ fun JarvisOrb(
         isListening: Boolean = false,
         isSpeaking: Boolean = false,
         toolName: String? = null,
-        baseColor: Color = MaterialTheme.colorScheme.primary
+        baseColor: Color = MaterialTheme.colorScheme.primary,
+        moodColor: Color = Color.Transparent
 ) {
         val infiniteTransition = rememberInfiniteTransition()
 
@@ -3461,7 +3478,19 @@ fun JarvisOrb(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp),
                 horizontalAlignment = Alignment.Start
         ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(100.dp)) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(140.dp)) {
+                        // Mood Glow (Arrière-plan)
+                        if (moodColor != Color.Transparent) {
+                                Canvas(modifier = Modifier.fillMaxSize()) {
+                                        drawCircle(
+                                                brush = Brush.radialGradient(
+                                                        colors = listOf(moodColor.copy(alpha = 0.35f), Color.Transparent),
+                                                        center = center,
+                                                        radius = size.width / 2
+                                                )
+                                        )
+                                }
+                        }
                         // 1. Halo extérieur profond (Atmosphère)
                         Canvas(modifier = Modifier.size(90.dp * pulseScale)) {
                                 drawCircle(

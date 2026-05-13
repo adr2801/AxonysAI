@@ -193,7 +193,7 @@ class JarvisEngine:
                 if target_mode:
                     mode_instruction = f"\n\n🎭 [MODE ACTIF : {target_mode['name'].upper()}]\n{target_mode['instruction']}"
 
-            instruction = f"""Tu es JARVIS, le majordome IA d'Antoine. Date actuelle: {date_str}. Position GPS: {context.lat}, {context.lng}.{user_facts_str}{prefs_str}{mode_instruction}
+            instruction = f"""Tu es JARVIS, le majordome IA de {user_name}. Date actuelle: {date_str}. Position GPS: {context.lat}, {context.lng}.{user_facts_str}{prefs_str}{mode_instruction}
 
 DIRECTIVES FONDAMENTALES :
 1. TON : Poli, efficace, avec une touche d'humour britannique (Paul Bettany style). Appelle toujours l'utilisateur par son prénom.
@@ -333,6 +333,12 @@ Réponds TOUJOURS en français, de façon concise et élégante.
         
         full_text = ""
         for chunk in response_stream:
+            # Détection d'appel d'outil (Function Calling)
+            if chunk.candidates and chunk.candidates[0].content.parts:
+                for part in chunk.candidates[0].content.parts:
+                    if part.function_call:
+                        yield {"tool_use": part.function_call.name}
+            
             if chunk.text:
                 full_text += chunk.text
                 yield chunk.text

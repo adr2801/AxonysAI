@@ -72,6 +72,9 @@ from fastapi.responses import StreamingResponse
 async def chat_stream(request: ChatRequest):
     async def event_generator():
         try:
+            # Envoi du sentiment détecté dès le début
+            yield f"data: {json.dumps({'sentiment': jarvis.last_sentiment})}\n\n"
+
             async for chunk in jarvis.process_query_stream(
                 prompt=request.prompt,
                 google_token=request.google_token,
@@ -82,8 +85,10 @@ async def chat_stream(request: ChatRequest):
                 mode=request.mode,
                 image_base64=request.image_base64
             ):
-                # Format SSE
-                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+                if isinstance(chunk, dict) and "tool_use" in chunk:
+                    yield f"data: {json.dumps({'tool_use': chunk['tool_use']})}\n\n"
+                elif isinstance(chunk, str):
+                    yield f"data: {json.dumps({'chunk': chunk})}\n\n"
             
             # Envoi final avec métadonnées (image_result, sentiment)
             yield f"data: {json.dumps({'done': True, 'image_result': jarvis.last_image_result, 'sentiment': jarvis.last_sentiment})}\n\n"
