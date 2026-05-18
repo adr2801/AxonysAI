@@ -36,7 +36,7 @@ jobs:
 
     - name: Get SHA-1 Fingerprint
       run: gradle signingReport
-      working-directory: ./CortexAndroidApp
+      working-directory: ./AxonysAndroidApp
 
     - name: Build with Gradle
       run: gradle assembleDebug
@@ -49,9 +49,9 @@ jobs:
 
 
 
-        name: "Cortex AI(Application Android)"
+        name: "Axonys AI(Application Android)"
         body: "Téléchargez l'application Cortex IA directement depuis cette page !"
-        files: CortexAndroidApp/app/build/outputs/apk/debug/CortexAI.apk
+        files: AxonysAndroidApp/app/build/outputs/apk/debug/AxonysAI.apk
         prerelease: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
