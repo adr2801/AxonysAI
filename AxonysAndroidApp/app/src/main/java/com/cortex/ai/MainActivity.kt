@@ -1,0 +1,1298 @@
+package com.cortex.ai
+
+import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.provider.Settings
+import android.util.Log
+import android.location.Location
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import androidx.work.*
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.Scope
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+// --- Modèles ---
+// Redondances supprimées : ThemeMode, JarvisChatMessage, TaskItem définis dans Models.kt
+
+class MainActivity : ComponentActivity() {
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private var updateLocation: ((Double, Double) -> Unit)? = null
+
+    private val requestPermissionLauncher =
+            registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+                if (isGranted) {
+                    requestLocation()
+                } else {
+                    Log.w("CortexAuth", "Permission refusée")
+                }
+            }
+
+    private fun requestLocation() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
+                location?.let {
+                    updateLocation?.invoke(it.latitude, it.longitude)
+                }
+            }
+        } else {
+            requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+    }
+
+    private val googleSignInLauncher =
+            registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+                val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                try {
+                    val account = task.getResult(ApiException::class.java)
+                    handleSignInResult(account)
+                } catch (e: ApiException) {
+                    Log.e("CortexAuth", "Google Sign-In failed: ${e.statusCode}")
+                    android.widget.Toast.makeText(
+                                    this,
+                                    "Erreur Google: ${e.statusCode}",
+                                    android.widget.Toast.LENGTH_LONG
+                            )
+                            .show()
+                }
+            }
+
+    private var onAuthSuccess: ((String) -> Unit)? = null
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent) 
+        // Si l'intent contient une notification, on peut déclencher un rafraîchissement
+        intent?.getStringExtra("notif_title")?.let { title ->
+            intent.getStringExtra("notif_message")?.let { message ->
+                // On pourra passer ça à l'état Compose via une callback ou un LiveData si besoin
+                Log.d("CortexNotif", "Nouvelle notification reçue via Intent: $title")
+            }
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        requestLocation()
+        
+        // Activation de l'anticipation proactive
+        toggleAnticipationWorker(true)
+
+        // Demande de permission notification pour Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        
+        val iaPrioriseur = MlpPrioriseur()
+
+        val prefs = getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
+        val savedTheme =
+                prefs.getString("theme_mode", ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name
+        val briefingEnabled = prefs.getBoolean("briefing_enabled", false)
+
+        val chatHistory = prefs.getString("chat_history", null)
+        val initialMessages =
+                if (chatHistory != null) {
+                    try {
+                        Gson().fromJson<List<JarvisChatMessage>>(
+                                        chatHistory,
+                                        object : TypeToken<List<JarvisChatMessage>>() {}.type
+                                )
+                    } catch (e: Exception) {
+                        listOf(JarvisChatMessage("Bonjour Antoine. Les systèmes sont en ligne.", false))
+                    }
+                } else listOf(JarvisChatMessage("Bonjour Antoine. Les systèmes sont en ligne.", false))
+
+        val savedTasks = prefs.getString("prioritized_tasks", null)
+        val initialTasks =
+                if (savedTasks != null) {
+                    try {
+                        Gson().fromJson<List<TaskItem>>(
+                                        savedTasks,
+                                        object : TypeToken<List<TaskItem>>() {}.type
+                                )
+                    } catch (e: Exception) {
+                        listOf<TaskItem>()
+                    }
+                } else listOf<TaskItem>()
+
+        val lastAccount = GoogleSignIn.getLastSignedInAccount(this)
+
+        setContent {
+            var themeMode by remember { mutableStateOf(ThemeMode.valueOf(savedTheme)) }
+            var isBriefingEnabled by remember { mutableStateOf(briefingEnabled) }
+            var JarvisChatMessages by remember { mutableStateOf(initialMessages) }
+            var prioritizedTasks by remember { mutableStateOf(initialTasks) }
+            var googleAccount by remember { mutableStateOf(lastAccount) }
+            var activeNotification by remember {
+                mutableStateOf<JarvisNotification?>(null)
+            }
+
+            // Surveillance des changements d'Intent pour afficher les notifications cliquées
+            LaunchedEffect(intent) {
+                intent?.getStringExtra("notif_title")?.let { title ->
+                    intent?.getStringExtra("notif_message")?.let { message ->
+                        activeNotification = JarvisNotification(title, message, "")
+                        // Nettoyage de l'intent pour éviter de réafficher la notif au pivotement
+                        intent.removeExtra("notif_title")
+                        intent.removeExtra("notif_message")
+                    }
+                }
+            }
+            
+            var currentLatitude by remember { mutableStateOf<Double?>(null) }
+            var currentLongitude by remember { mutableStateOf<Double?>(null) }
+            
+            updateLocation = { lat, lng ->
+                currentLatitude = lat
+                currentLongitude = lng
+            }
+
+            // Polling des notifications proactives
+            LaunchedEffect(googleAccount) {
+                while (true) {
+                    try {
+                        val notifResponse = JarvisApiClient.apiService.getNotifications()
+                        val notifs = notifResponse.notifications
+                        if (notifs.isNotEmpty()) {
+                            notifs.forEach { notif ->
+                                showNativeNotification(this@MainActivity, notif.title, notif.message)
+                                // Ajout automatique à la discussion
+                                val chatNotif = JarvisChatMessage(text = "🔔 **${notif.title}**\n${notif.message}", isUser = false, isError = false)
+                                JarvisChatMessages = JarvisChatMessages + chatNotif
+                            }
+                            JarvisApiClient.apiService.clearNotifications()
+                        }
+                    } catch (e: Exception) {
+                        Log.e("JarvisPolling", "Erreur polling: ${e.message}")
+                    }
+                    kotlinx.coroutines.delay(30000) // 30 secondes
+                }
+            }
+
+            // Rafraîchissement automatique au démarrage
+            LaunchedEffect(googleAccount) {
+                googleAccount?.let { account ->
+                    val token = getFreshAccessToken(account)
+                    if (token != null) {
+                        prefs.edit().putString("google_id_token", token).apply()
+                        Log.d("CortexAuth", "Token rafraîchi automatiquement au démarrage")
+                    }
+                }
+            }
+
+            onAuthSuccess = { googleAccount = GoogleSignIn.getLastSignedInAccount(this) }
+
+            val isDark =
+                    when (themeMode) {
+                        ThemeMode.LIGHT -> false
+                        ThemeMode.DARK -> true
+                        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                    }
+
+            val darkColors =
+                    darkColorScheme(
+                            primary = Color(0xFF64B5F6),
+                            secondary = Color(0xFF9575CD),
+                            background = Color(0xFF0F111A),
+                            surface = Color(0xFF1A1D2E),
+                            onPrimary = Color.Black,
+                            onBackground = Color.White,
+                            onSurface = Color.White,
+                            primaryContainer = Color(0xFF22283D),
+                            surfaceVariant = Color(0xFF2C314D)
+                    )
+
+            val lightColors =
+                    lightColorScheme(
+                            primary = Color(0xFF4F46E5), // Indigo Moderne
+                            secondary = Color(0xFF7C3AED), // Violet
+                            background = Color(0xFFF9FAFB), // Blanc cassé
+                            surface = Color.White,
+                            onPrimary = Color.White,
+                            onBackground = Color(0xFF111827),
+                            onSurface = Color(0xFF1F2937),
+                            primaryContainer = Color(0xFFEEF2FF), // Fond bulle utilisateur
+                            surfaceVariant = Color(0xFFF3F4F6) // Fond bulle Jarvis
+                    )
+
+            val colorScheme = if (isDark) darkColors else lightColors
+
+            MaterialTheme(colorScheme = colorScheme) {
+                Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                ) {
+                    MainScreen(
+                            iaPrioriseur = iaPrioriseur,
+                            themeMode = themeMode,
+                            isBriefingEnabled = isBriefingEnabled,
+                            JarvisChatMessages = JarvisChatMessages,
+                            prioritizedTasks = prioritizedTasks,
+                            googleAccount = googleAccount,
+                            lat = currentLatitude,
+                            lng = currentLongitude,
+                            onThemeChange = {
+                                themeMode = it
+                                prefs.edit().putString("theme_mode", it.name).apply()
+                            },
+                            onBriefingToggle = {
+                                isBriefingEnabled = it
+                                prefs.edit().putBoolean("briefing_enabled", it).apply()
+                                toggleBriefingWorker(it)
+                            },
+                            onMessagesChange = {
+                                JarvisChatMessages = it
+                                prefs.edit().putString("chat_history", Gson().toJson(it)).apply()
+                            },
+                            onTasksChange = {
+                                prioritizedTasks = it
+                                prefs.edit()
+                                        .putString("prioritized_tasks", Gson().toJson(it))
+                                        .apply()
+                            },
+                            onGoogleSignIn = { startGoogleSignIn() },
+                            onGoogleSignOut = { signOutGoogle() },
+                            onRequestNotifPermission = { checkAndRequestNotifPermission() },
+                            onRequestNotifAccess = { openNotificationAccessSettings() },
+                            onRefreshToken = { googleAccount?.let { getFreshAccessToken(it) } }
+                    )
+                }
+            }
+        }
+    }
+
+    private fun startGoogleSignIn() {
+        val gso =
+                GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                        .requestEmail()
+                        .requestProfile()
+                        .requestScopes(
+                                Scope("https://www.googleapis.com/auth/gmail.readonly"),
+                                Scope("https://www.googleapis.com/auth/calendar.readonly"),
+                                Scope("https://www.googleapis.com/auth/gmail.modify"),
+                                Scope("https://www.googleapis.com/auth/documents"),
+                                Scope("https://www.googleapis.com/auth/drive.file")
+                        )
+                        .requestIdToken(
+                                "449010615326-bn7o6ek8jau2kphiaof04nptkbvntokl.apps.googleusercontent.com"
+                        )
+                        .build()
+        val client = GoogleSignIn.getClient(this, gso)
+        googleSignInLauncher.launch(client.signInIntent)
+    }
+
+    private fun handleSignInResult(account: GoogleSignInAccount?) {
+        if (account != null) {
+            val scope =
+                    "oauth2:https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/calendar"
+
+            lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    val token =
+                            com.google.android.gms.auth.GoogleAuthUtil.getToken(
+                                    this@MainActivity,
+                                    account.account!!,
+                                    scope
+                            )
+
+                    val prefs = getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
+                    prefs.edit().putString("google_id_token", token).apply()
+                    prefs.edit().putString("user_name", account.displayName ?: "Antoine").apply()
+
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        android.widget.Toast.makeText(
+                                        this@MainActivity,
+                                        "Accès Workspace activé !",
+                                        android.widget.Toast.LENGTH_SHORT
+                                )
+                                .show()
+                        onAuthSuccess?.invoke(account.displayName ?: "")
+                    }
+                } catch (e: Exception) {
+                    Log.e("CortexAuth", "Erreur AccessToken: ${e.message}")
+                    if (e is com.google.android.gms.auth.UserRecoverableAuthException) {
+                        googleSignInLauncher.launch(e.intent)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun signOutGoogle() {
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).build()
+        val client = GoogleSignIn.getClient(this, gso)
+        client.signOut().addOnCompleteListener {
+            val prefs = getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
+            prefs.edit().remove("google_id_token").apply()
+            recreate()
+        }
+    }
+
+    private fun checkAndRequestNotifPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+                            PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    private fun openNotificationAccessSettings() {
+        startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+    }
+
+    private fun toggleBriefingWorker(enabled: Boolean) {
+        val workManager = WorkManager.getInstance(this)
+        if (enabled) {
+            val briefingRequest =
+                    PeriodicWorkRequestBuilder<BriefingWorker>(24, TimeUnit.HOURS)
+                            .setInitialDelay(1, TimeUnit.MINUTES)
+                            .addTag("morning_briefing")
+                            .build()
+            workManager.enqueueUniquePeriodicWork(
+                    "morning_briefing",
+                    ExistingPeriodicWorkPolicy.UPDATE,
+                    briefingRequest
+            )
+        } else {
+            workManager.cancelUniqueWork("morning_briefing")
+        }
+    }
+
+    private fun toggleAnticipationWorker(enabled: Boolean) {
+        val workManager = WorkManager.getInstance(this)
+        if (enabled) {
+            val anticipateRequest =
+                    PeriodicWorkRequestBuilder<AnticipationWorker>(1, TimeUnit.HOURS)
+                            .setInitialDelay(5, TimeUnit.MINUTES)
+                            .addTag("jarvis_anticipation")
+                            .build()
+            workManager.enqueueUniquePeriodicWork(
+                    "jarvis_anticipation",
+                    ExistingPeriodicWorkPolicy.KEEP, // Garder si déjà existant
+                    anticipateRequest
+            )
+            Log.d("JarvisAnticipate", "Moteur d'anticipation programmé (1h)")
+        } else {
+            workManager.cancelUniqueWork("jarvis_anticipation")
+        }
+    }
+
+    private suspend fun getFreshAccessToken(account: GoogleSignInAccount): String? =
+            withContext(Dispatchers.IO) {
+                try {
+                    val scope =
+                            "oauth2:https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file"
+                    // Clear current token to force refresh if needed
+                    val prefs = getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
+                    val currentToken = prefs.getString("google_id_token", null)
+                    if (currentToken != null) {
+                        com.google.android.gms.auth.GoogleAuthUtil.clearToken(
+                                this@MainActivity,
+                                currentToken
+                        )
+                    }
+                    val newToken =
+                            com.google.android.gms.auth.GoogleAuthUtil.getToken(
+                                    this@MainActivity,
+                                    account.account!!,
+                                    scope
+                            )
+                    prefs.edit().putString("google_id_token", newToken).apply()
+                    newToken
+                } catch (e: Exception) {
+                    Log.e("CortexAuth", "Erreur refresh token: ${e.message}")
+                    null
+                }
+            }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MainScreen(
+        iaPrioriseur: MlpPrioriseur,
+        themeMode: ThemeMode,
+        isBriefingEnabled: Boolean,
+        JarvisChatMessages: List<JarvisChatMessage>,
+        prioritizedTasks: List<TaskItem>,
+        googleAccount: GoogleSignInAccount?,
+        lat: Double?,
+        lng: Double?,
+        onThemeChange: (ThemeMode) -> Unit,
+        onBriefingToggle: (Boolean) -> Unit,
+        onMessagesChange: (List<JarvisChatMessage>) -> Unit,
+        onTasksChange: (List<TaskItem>) -> Unit,
+        onGoogleSignIn: () -> Unit,
+        onGoogleSignOut: () -> Unit,
+        onRequestNotifPermission: () -> Unit,
+        onRequestNotifAccess: () -> Unit,
+        onRefreshToken: suspend () -> String?
+) {
+    var selectedTab by remember { mutableStateOf(0) }
+    var updateUrl by remember { mutableStateOf<String?>(null) }
+    var activeNotification by remember { mutableStateOf<JarvisNotification?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // Polling pour les notifications proactives
+    LaunchedEffect(googleAccount) {
+        if (googleAccount != null) {
+            while (true) {
+                try {
+                    val response = JarvisApiClient.apiService.getNotifications()
+                    if (response.notifications.isNotEmpty()) {
+                        response.notifications.forEach { notif ->
+                            showNativeNotification(context, notif.title, notif.message)
+                            // On pourrait aussi les afficher dans la liste de chat si besoin
+                        }
+                        // Une fois reçues, on demande au serveur de les effacer
+                        JarvisApiClient.apiService.clearNotifications()
+                    }
+                } catch (e: Exception) {
+                    Log.e("CortexNotif", "Erreur polling: ${e.message}")
+                }
+                kotlinx.coroutines.delay(30000) // Toutes les 30 secondes
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        try {
+            val release = JarvisApiClient.githubService.getLatestRelease()
+            if (release.tag_name.replace("v", "") != com.cortex.ai.BuildConfig.VERSION_NAME) {
+                updateUrl = release.html_url
+            }
+        } catch (e: Exception) {}
+    }
+
+    if (updateUrl != null) {
+        AlertDialog(
+                onDismissRequest = { updateUrl = null },
+                title = { Text("Mise à jour disponible 🎉") },
+                text = { Text("Une nouvelle version de Cortex IA est disponible sur GitHub !") },
+                confirmButton = {
+                    Button(
+                            onClick = {
+                                context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse(updateUrl))
+                                )
+                                updateUrl = null
+                            }
+                    ) { Text("Mettre à jour") }
+                },
+                dismissButton = { TextButton(onClick = { updateUrl = null }) { Text("Plus tard") } }
+        )
+    }
+
+    Scaffold(
+            bottomBar = {
+                NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 8.dp
+                ) {
+                    NavigationBarItem(
+                            selected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            icon = { Icon(Icons.Default.List, contentDescription = null) },
+                            label = { Text("Focus", fontWeight = FontWeight.Medium) }
+                    )
+                    NavigationBarItem(
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            icon = { Icon(Icons.Default.Email, contentDescription = null) },
+                            label = { Text("Jarvis", fontWeight = FontWeight.Medium) }
+                    )
+                    NavigationBarItem(
+                            selected = selectedTab == 2,
+                            onClick = { selectedTab = 2 },
+                            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                            label = { Text("Paramètres", fontWeight = FontWeight.Medium) }
+                    )
+                }
+            }
+    ) { padding ->
+        Box(
+                modifier =
+                        Modifier.fillMaxSize()
+                                .padding(padding)
+                                .background(
+                                        Brush.verticalGradient(
+                                                colors = if (isSystemInDarkTheme())
+                                                    listOf(Color(0xFF0F111A), Color(0xFF1A1D2E))
+                                                else
+                                                    listOf(Color(0xFFF9FAFB), Color(0xFFF3F4F6))
+                                        )
+                                )
+        ) {
+            Crossfade(targetState = selectedTab, animationSpec = tween(400)) { tab ->
+                when (tab) {
+                    0 -> PrioritizerScreen(iaPrioriseur, prioritizedTasks, onTasksChange)
+                    1 -> JarvisScreen(JarvisChatMessages, googleAccount, lat, lng, onMessagesChange, onRefreshToken)
+                    2 ->
+                            SettingsScreen(
+                                    themeMode,
+                                    isBriefingEnabled,
+                                    googleAccount,
+                                    onThemeChange,
+                                    onBriefingToggle,
+                                    onGoogleSignIn,
+                                    onGoogleSignOut,
+                                    onRequestNotifPermission,
+                                    onRequestNotifAccess
+                            )
+                }
+            }
+
+            // Écran de détail de notification (Overlay)
+            activeNotification?.let { notif ->
+                NotificationDetailScreen(
+                    notification = notif,
+                    onDismiss = { activeNotification = null }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun NotificationDetailScreen(
+    notification: JarvisNotification,
+    onDismiss: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.9f))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.85f)
+                .padding(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(24.dp),
+            tonalElevation = 8.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "🤖 Jarvis vous informe",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    notification.title,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    notification.message,
+                    fontSize = 16.sp,
+                    lineHeight = 24.sp,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(32.dp))
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Compris, merci Jarvis")
+                }
+            }
+        }
+    }
+}
+
+private fun showNativeNotification(context: Context, title: String, message: String) {
+    val channelId = "jarvis_notifications"
+    val intent = Intent(context, MainActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        putExtra("notif_title", title)
+        putExtra("notif_message", message)
+    }
+
+    val pendingIntent = PendingIntent.getActivity(
+        context, 0, intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    val notification = androidx.core.app.NotificationCompat.Builder(context, channelId)
+        .setSmallIcon(R.mipmap.ic_launcher)
+        .setContentTitle(title)
+        .setContentText(message)
+        .setStyle(androidx.core.app.NotificationCompat.BigTextStyle()
+            .bigText(message)
+            .setBigContentTitle(title)
+            .setSummaryText("Alerte Jarvis"))
+        .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+        .setCategory(androidx.core.app.NotificationCompat.CATEGORY_EVENT)
+        .setContentIntent(pendingIntent)
+        .setAutoCancel(true)
+        .build()
+
+
+    val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        val channel = NotificationChannel(channelId, "Alertes Jarvis", NotificationManager.IMPORTANCE_HIGH)
+        notificationManager.createNotificationChannel(channel)
+    }
+    
+    notificationManager.notify(System.currentTimeMillis().toInt(), notification)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PrioritizerScreen(
+        iaPrioriseur: MlpPrioriseur,
+        tasks: List<TaskItem>,
+        onTasksChange: (List<TaskItem>) -> Unit
+) {
+    var taskName by remember { mutableStateOf("") }
+    var urgency by remember { mutableStateOf(5f) }
+    var importance by remember { mutableStateOf(5f) }
+    var duration by remember { mutableStateOf(5f) }
+    var envy by remember { mutableStateOf(5f) }
+    var energy by remember { mutableStateOf(5f) }
+
+    LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                        "🧠 Cortex IA",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.primary
+                )
+                Text("v${BuildConfig.VERSION_NAME}", fontSize = 14.sp, color = Color.Gray)
+            }
+            Spacer(modifier = Modifier.height(20.dp))
+            OutlinedTextField(
+                    value = taskName,
+                    onValueChange = { taskName = it },
+                    label = { Text("Nouvelle tâche...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    singleLine = true
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            SliderRow("Urgence", urgency) { urgency = it }
+            SliderRow("Importance", importance) { importance = it }
+            SliderRow("Durée", duration) { duration = it }
+            SliderRow("Envie", envy) { envy = it }
+            SliderRow("Énergie", energy) { energy = it }
+            Button(
+                    onClick = {
+                        if (taskName.isNotBlank()) {
+                            val score =
+                                    iaPrioriseur.forward(
+                                            urgency.toDouble(),
+                                            importance.toDouble(),
+                                            duration.toDouble(),
+                                            envy.toDouble(),
+                                            energy.toDouble()
+                                    )
+                            val newList =
+                                    (tasks + TaskItem(taskName, score * 100)).sortedByDescending {
+                                        it.score
+                                    }
+                            onTasksChange(newList)
+                            taskName = ""
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(56.dp).padding(top = 8.dp),
+                    shape = RoundedCornerShape(16.dp)
+            ) { Text("Analyser la priorité") }
+            Spacer(modifier = Modifier.height(24.dp))
+            Text("Ma Liste de Priorités", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+        items(tasks, key = { it.name + it.score }) { task ->
+            AnimatedVisibility(
+                    visible = true,
+                    enter = slideInVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+            ) { TaskCard(task) { onTasksChange(tasks.filter { it != task }) } }
+        }
+    }
+}
+
+@OptIn(
+        ExperimentalMaterial3Api::class,
+        androidx.compose.foundation.ExperimentalFoundationApi::class
+)
+@Composable
+fun JarvisScreen(
+        messages: List<JarvisChatMessage>,
+        googleAccount: GoogleSignInAccount?,
+        lat: Double?,
+        lng: Double?,
+        onMessagesChange: (List<JarvisChatMessage>) -> Unit,
+        onRefreshToken: suspend () -> String?
+) {
+    var input by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val listState = rememberLazyListState()
+
+    // --- Gestion des Threads ---
+    var currentThreadId by remember { mutableStateOf("main") }
+    var threads by remember { mutableStateOf(listOf("main")) }
+    var showSidebar by remember { mutableStateOf(false) }
+    var showNewThreadDialog by remember { mutableStateOf(false) }
+    var newThreadName by remember { mutableStateOf("") }
+    // Messages par thread (stockés localement pour éviter de tout recharger)
+    var threadMessages by remember { mutableStateOf(mapOf("main" to messages)) }
+    val currentMessages = threadMessages[currentThreadId] ?: emptyList()
+
+    // Synchronisation du thread "main" avec les messages partagés
+    LaunchedEffect(messages) {
+        threadMessages = threadMessages.toMutableMap().also { it["main"] = messages }
+    }
+
+    // Chargement des threads disponibles depuis l'API
+    LaunchedEffect(Unit) {
+        try {
+            val response = JarvisApiClient.apiService.getThreads()
+            threads = response.threads
+        } catch (e: Exception) {
+            Log.e("JarvisThreads", "Erreur chargement threads: ${e.message}")
+        }
+    }
+
+    // Auto-scroll au dernier message
+    LaunchedEffect(currentMessages.size) {
+        if (currentMessages.isNotEmpty()) listState.animateScrollToItem(currentMessages.size - 1)
+    }
+
+    // Couleur d'accent selon le thread (main = bleu primaire, autres = violet/orange)
+    val threadColor = if (currentThreadId == "main")
+        MaterialTheme.colorScheme.primary
+    else Color(0xFF9575CD)
+
+    // Dialogue de création de nouveau thread
+    if (showNewThreadDialog) {
+        AlertDialog(
+            onDismissRequest = { showNewThreadDialog = false },
+            title = { Text("Nouvelle Discussion", fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = newThreadName,
+                    onValueChange = { newThreadName = it },
+                    label = { Text("Nom du canal (ex: 📚 NSI, 🚀 Projet...)") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    if (newThreadName.isNotBlank()) {
+                        val threadId = newThreadName.lowercase().replace(" ", "_")
+                        threads = threads + threadId
+                        threadMessages = threadMessages.toMutableMap().also {
+                            it[threadId] = emptyList()
+                        }
+                        currentThreadId = threadId
+                        newThreadName = ""
+                        showNewThreadDialog = false
+                        showSidebar = false
+                    }
+                }) { Text("Créer") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewThreadDialog = false }) { Text("Annuler") }
+            }
+        )
+    }
+
+    Row(modifier = Modifier.fillMaxSize()) {
+        // --- SIDEBAR ---
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showSidebar,
+            enter = androidx.compose.animation.slideInHorizontally() + androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.slideOutHorizontally() + androidx.compose.animation.fadeOut()
+        ) {
+            Surface(
+                modifier = Modifier.width(220.dp).fillMaxHeight(),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 8.dp
+            ) {
+                Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                    Text(
+                        "🤖 Discussions",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    threads.forEach { threadId ->
+                        val isSelected = threadId == currentThreadId
+                        val displayName = if (threadId == "main") "🏠 Général" else "📌 ${threadId.replace("_", " ")}"
+                        Surface(
+                            onClick = {
+                                currentThreadId = threadId
+                                showSidebar = false
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) threadColor.copy(alpha = 0.2f)
+                                    else Color.Transparent,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                        ) {
+                            Text(
+                                displayName,
+                                modifier = Modifier.padding(12.dp),
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) threadColor else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // Bouton "+" Créer un canal
+                    Button(
+                        onClick = { showNewThreadDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = threadColor)
+                    ) {
+                        Text("+ Nouveau canal")
+                    }
+                }
+            }
+        }
+
+        // --- CHAT PRINCIPAL ---
+        Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+
+            // En-tête avec le nom du thread actif
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            listOf(
+                                threadColor.copy(alpha = 0.15f),
+                                MaterialTheme.colorScheme.surface
+                            )
+                        )
+                    )
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Bouton sidebar
+                    Surface(
+                        onClick = { showSidebar = !showSidebar },
+                        shape = RoundedCornerShape(10.dp),
+                        color = threadColor.copy(alpha = 0.15f),
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(if (showSidebar) "✕" else "☰", fontSize = 18.sp, color = threadColor)
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            if (currentThreadId == "main") "JARVIS" else currentThreadId.replace("_", " ").uppercase(),
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 3.sp,
+                            color = threadColor
+                        )
+                        if (currentThreadId != "main") {
+                            Text("Sous-discussion spécialisée", fontSize = 11.sp, color = Color.Gray)
+                        }
+                    }
+                }
+            }
+
+            // Messages du thread actif
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item { Spacer(modifier = Modifier.height(8.dp)) }
+                items(currentMessages) { msg ->
+                    val align = if (msg.isUser) Alignment.CenterEnd else Alignment.CenterStart
+                    val bubbleColor =
+                        if (msg.isError) Color(0xFFD32F2F)
+                        else if (msg.isUser) threadColor
+                        else MaterialTheme.colorScheme.surfaceVariant
+                    val textColor = if (msg.isUser) Color.White else MaterialTheme.colorScheme.onSurface
+
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = align) {
+                        Surface(
+                            color = bubbleColor,
+                            shape = RoundedCornerShape(
+                                topStart = 20.dp, topEnd = 20.dp,
+                                bottomStart = if (msg.isUser) 20.dp else 4.dp,
+                                bottomEnd = if (msg.isUser) 4.dp else 20.dp
+                            ),
+                            tonalElevation = 4.dp,
+                            shadowElevation = 2.dp,
+                            modifier = Modifier.widthIn(max = 300.dp)
+                                .combinedClickable(
+                                    onLongClick = {
+                                        val updated = threadMessages.toMutableMap()
+                                        updated[currentThreadId] = currentMessages.filter { it != msg }
+                                        threadMessages = updated
+                                        if (currentThreadId == "main") onMessagesChange(updated["main"] ?: emptyList())
+                                    },
+                                    onClick = {}
+                                )
+                        ) {
+                            Text(
+                                msg.text,
+                                modifier = Modifier.padding(14.dp),
+                                color = textColor,
+                                fontSize = 16.sp,
+                                lineHeight = 22.sp
+                            )
+                        }
+                    }
+                }
+                if (isLoading) {
+                    item {
+                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = threadColor)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Jarvis réfléchit...", color = Color.Gray, fontSize = 14.sp)
+                        }
+                    }
+                }
+                item { Spacer(modifier = Modifier.height(8.dp)) }
+            }
+
+            // Barre de saisie
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(16.dp)
+                    .navigationBarsPadding(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = {
+                        Text(
+                            if (currentThreadId == "main") "Parler à Jarvis..."
+                            else "Parler dans ${currentThreadId.replace("_", " ")}...",
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        )
+                    },
+                    shape = RoundedCornerShape(28.dp),
+                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedBorderColor = threadColor.copy(alpha = 0.5f)
+                    ),
+                    maxLines = 4
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Surface(
+                    onClick = {
+                        if (input.isNotBlank() && !isLoading) {
+                            val userMsg = input
+                            val updatedWithUser = currentMessages + JarvisChatMessage(text = userMsg, isUser = true, isError = false)
+                            val updated = threadMessages.toMutableMap()
+                            updated[currentThreadId] = updatedWithUser
+                            threadMessages = updated
+                            if (currentThreadId == "main") onMessagesChange(updatedWithUser)
+                            input = ""
+                            isLoading = true
+                            coroutineScope.launch {
+                                try {
+                                    val prefs = context.getSharedPreferences("CortexPrefs", Context.MODE_PRIVATE)
+                                    var token = prefs.getString("google_id_token", null)
+                                    val freshToken = onRefreshToken()
+                                    if (freshToken != null) token = freshToken
+                                    val name = googleAccount?.displayName ?: "Antoine"
+                                    val response = JarvisApiClient.apiService.sendMessage(
+                                        ChatRequest(userMsg, token, name, lat, lng, currentThreadId)
+                                    )
+                                    val jarvisMsg = JarvisChatMessage(
+                                        text = response.response ?: response.text ?: "Aucune réponse.", isUser = false, isError = false
+                                    )
+                                    val withResponse = updatedWithUser + jarvisMsg
+                                    val updatedFinal = threadMessages.toMutableMap()
+                                    updatedFinal[currentThreadId] = withResponse
+                                    threadMessages = updatedFinal
+                                    if (currentThreadId == "main") onMessagesChange(withResponse)
+                                } catch (e: Exception) {
+                                    val errMsg = JarvisChatMessage("Erreur de connexion au serveur.", isUser = false, isError = true)
+                                    val updatedErr = threadMessages.toMutableMap()
+                                    updatedErr[currentThreadId] = updatedWithUser + errMsg
+                                    threadMessages = updatedErr
+                                    if (currentThreadId == "main") onMessagesChange(updatedWithUser + errMsg)
+                                } finally {
+                                    isLoading = false
+                                }
+                            }
+                        }
+                    },
+                    shape = CircleShape,
+                    color = threadColor,
+                    modifier = Modifier.size(52.dp),
+                    enabled = input.isNotBlank() && !isLoading
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (isLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                        } else {
+                            Text("↑", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+fun SettingsScreen(
+        themeMode: ThemeMode,
+        isBriefingEnabled: Boolean,
+        googleAccount: GoogleSignInAccount?,
+        onThemeChange: (ThemeMode) -> Unit,
+        onBriefingToggle: (Boolean) -> Unit,
+        onGoogleSignIn: () -> Unit,
+        onGoogleSignOut: () -> Unit,
+        onRequestNotifPermission: () -> Unit,
+        onRequestNotifAccess: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
+        Text(
+                "⚙️ Paramètres",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Text("Apparence", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+            Column(modifier = Modifier.padding(8.dp)) {
+                ThemeOptionRow("Thème Système", ThemeMode.SYSTEM, themeMode, onThemeChange)
+                ThemeOptionRow("Mode Clair", ThemeMode.LIGHT, themeMode, onThemeChange)
+                ThemeOptionRow("Mode Sombre", ThemeMode.DARK, themeMode, onThemeChange)
+            }
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+        Text("Automatisation", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Morning Briefing", fontWeight = FontWeight.Medium)
+                        Text(
+                                "Jarvis résume ta journée à 8h00",
+                                fontSize = 12.sp,
+                                color = Color.Gray
+                        )
+                    }
+                    Switch(
+                            checked = isBriefingEnabled,
+                            onCheckedChange = {
+                                onBriefingToggle(it)
+                                if (it) onRequestNotifPermission()
+                            }
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                        onClick = onRequestNotifAccess,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                ) { Text("Autoriser la lecture des notifications") }
+            }
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+        Text("Compte Google Workspace", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+            Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (googleAccount != null) {
+                    Text("Connecté en tant que :", fontSize = 12.sp, color = Color.Gray)
+                    Text(
+                            googleAccount.displayName ?: "Utilisateur Google",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                    )
+                    Text(googleAccount.email ?: "", fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                            onClick = onGoogleSignOut,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors =
+                                    ButtonDefaults.buttonColors(
+                                            containerColor =
+                                                    MaterialTheme.colorScheme.errorContainer,
+                                            contentColor =
+                                                    MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                    ) { Text("Se déconnecter") }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                            "Jarvis a accès à votre Workspace.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Text(
+                            "Liez votre compte pour Gmail et Calendrier.",
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    Button(
+                            onClick = onGoogleSignIn,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                    ) { Text("Se connecter avec Google") }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(32.dp))
+    }
+}
+
+@Composable
+fun TaskCard(task: TaskItem, onDelete: () -> Unit) {
+    val colors =
+            if (task.score >= 70) listOf(Color(0xFFFF5252), Color(0xFFFF1744))
+            else if (task.score >= 40) listOf(Color(0xFFFFB300), Color(0xFFFF8F00))
+            else listOf(Color(0xFF00E676), Color(0xFF00C853))
+    Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(4.dp)
+    ) {
+        Row(
+                modifier =
+                        Modifier.background(Brush.horizontalGradient(colors))
+                                .padding(16.dp)
+                                .fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(task.name, color = Color.White, modifier = Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${task.score.toInt()}%", color = Color.White, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(onClick = onDelete, modifier = Modifier.size(24.dp)) { Text("✅") }
+            }
+        }
+    }
+}
+
+@Composable
+fun SliderRow(label: String, value: Float, onValueChange: (Float) -> Unit) {
+    Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().height(40.dp)
+    ) {
+        Text(label, modifier = Modifier.weight(1f), fontSize = 13.sp)
+        Slider(
+                value = value,
+                onValueChange = onValueChange,
+                valueRange = 0f..10f,
+                steps = 10,
+                modifier = Modifier.weight(2f)
+        )
+    }
+}
+
+@Composable
+fun ThemeOptionRow(
+        label: String,
+        option: ThemeMode,
+        current: ThemeMode,
+        onSelect: (ThemeMode) -> Unit
+) {
+    Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = current == option, onClick = { onSelect(option) })
+        Text(label, modifier = Modifier.padding(start = 8.dp))
+    }
+}
