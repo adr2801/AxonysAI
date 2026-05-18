@@ -40,12 +40,12 @@ jobs:
 
     - name: Build with Gradle
       run: gradle assembleDebug
-      working-directory: ./CortexAndroidApp
+      working-directory: ./AxonysAndroidApp
 
     - name: Publier sur la page Releases (Pas de quota)
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: "v1.3.0"
+        tag_name: "v1.3.5"
 
 
 
