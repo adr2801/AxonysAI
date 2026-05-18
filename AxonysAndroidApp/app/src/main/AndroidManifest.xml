@@ -7,11 +7,14 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
 
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="Cortex IA"
+        android:label="Cortex AI"
+
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
@@ -19,7 +22,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="Cortex IA"
+            android:label="Cortex AI"
             android:theme="@android:style/Theme.Material.Light.NoActionBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -29,7 +32,8 @@
 
         <!-- Service pour lire les notifications des autres apps -->
         <service android:name=".NotificationService"
-            android:label="Cortex AI Notif Reader"
+            android:label="Cortex IA Notif Reader"
+
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
             android:exported="true">
             <intent-filter>

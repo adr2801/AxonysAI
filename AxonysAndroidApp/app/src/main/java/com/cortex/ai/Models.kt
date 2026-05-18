@@ -8,9 +8,24 @@ enum class ThemeMode {
     DARK
 }
 
-data class JarvisChatMessage(val text: String, val isUser: Boolean, val isError: Boolean = false)
+data class JarvisChatMessage(
+    val text: String, 
+    val isUser: Boolean, 
+    val isError: Boolean = false,
+    val isThinking: Boolean = false,
+    val isToolRunning: Boolean = false,
+    val currentTool: String? = null,
+    val isNew: Boolean = false,
+    val imageResult: String? = null
+)
 
-data class TaskItem(val name: String, val score: Double)
+
+data class TaskItem(
+    val id: Int? = null,
+    val name: String? = "Sans titre",
+    val score: Double? = 0.0,
+    val status: String? = "pending"
+)
 
 data class ThreadResponse(val threads: List<String>)
 
