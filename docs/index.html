@@ -3,130 +3,130 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cortex IA — Votre Assistant Intelligent</title>
-    <meta name="description" content="Cortex IA est un assistant personnel alimenté par l'intelligence artificielle qui gère vos emails, votre calendrier et vos documents Google Docs.">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', sans-serif;
-            background: #0F111A;
-            color: #E2E8F0;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-        .hero {
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            padding: 2rem;
-            background: radial-gradient(ellipse at 50% 0%, rgba(79, 70, 229, 0.15) 0%, transparent 60%),
-                        linear-gradient(180deg, #0F111A 0%, #1A1D2E 100%);
-        }
-        .logo {
-            font-size: 4rem;
-            font-weight: 900;
-            letter-spacing: 0.3em;
-            background: linear-gradient(135deg, #64B5F6, #9575CD);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 1rem;
-        }
-        .tagline {
-            font-size: 1.4rem;
-            font-weight: 300;
-            color: #94A3B8;
-            max-width: 600px;
-            line-height: 1.8;
-            margin-bottom: 3rem;
-        }
-        .features {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            max-width: 900px;
-            width: 100%;
-            margin-bottom: 3rem;
-        }
-        .feature-card {
-            background: rgba(26, 29, 46, 0.8);
-            border: 1px solid rgba(100, 181, 246, 0.1);
-            border-radius: 16px;
-            padding: 2rem;
-            text-align: left;
-            transition: transform 0.3s, border-color 0.3s;
-        }
-        .feature-card:hover {
-            transform: translateY(-4px);
-            border-color: rgba(100, 181, 246, 0.3);
-        }
-        .feature-icon { font-size: 2rem; margin-bottom: 1rem; }
-        .feature-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; color: #F1F5F9; }
-        .feature-desc { font-size: 0.9rem; color: #94A3B8; line-height: 1.6; }
-        .cta {
-            display: inline-block;
-            padding: 1rem 2.5rem;
-            background: linear-gradient(135deg, #4F46E5, #7C3AED);
-            color: white;
-            text-decoration: none;
-            border-radius: 50px;
-            font-weight: 600;
-            font-size: 1.1rem;
-            transition: transform 0.2s, box-shadow 0.2s;
-            margin-bottom: 2rem;
-        }
-        .cta:hover {
-            transform: scale(1.05);
-            box-shadow: 0 10px 40px rgba(79, 70, 229, 0.3);
-        }
-        .footer {
-            text-align: center;
-            padding: 2rem;
-            color: #475569;
-            font-size: 0.85rem;
-        }
-        .footer a { color: #64B5F6; text-decoration: none; }
-        .footer a:hover { text-decoration: underline; }
-    </style>
+    <title>Axonys AI</title>
+    <link rel="stylesheet" href="stylesheet.css">
+	<link rel="icon" type="image/svg+xml" href="favicon.txt">
+	<meta name="google-site-verification" content="JItMdHyM06m0RedKoFdBfNLvHbP4wW1DcB9pfbyWgpI" />
+    <script src="site javascript.js" defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="hero">
-        <div class="logo">CORTEX IA</div>
-        <p class="tagline">
-            Votre majordome numérique personnel. Jarvis gère vos emails, votre calendrier 
-            et vos documents avec l'élégance d'un assistant britannique.
-        </p>
-        <div class="features">
-            <div class="feature-card">
-                <div class="feature-icon">📧</div>
-                <div class="feature-title">Gestion des Emails</div>
-                <div class="feature-desc">Lisez, envoyez et organisez vos emails Gmail par simple commande vocale ou textuelle.</div>
+    <div class="bg-glow"></div>
+
+    <nav class="tab-navigation">
+        <button class="tab-btn active" data-target="home">Système</button>
+        <button class="tab-btn" data-target="pricing">Distribution</button>
+        <button class="tab-btn" data-target="updates">Changelog</button>
+        <a href="https://github.com/adr2801/AxonysAI" target="_blank" class="github-link-btn">
+            <img src="https://cdn-icons-png.flaticon.com/512/25/25231.png" width="18" alt="GitHub"> GitHub
+        </a>
+    </nav>
+
+    <div class="main-wrapper">
+        
+        <section id="home" class="tab-content active">
+            <header class="hero">
+                <h1 class="glitch-text">Axonys <span>AI</span></h1>
+                <p>L'agent autonome conçu pour l'efficacité.</p>
+            </header>
+
+            <section class="features-grid">
+                <div class="feature-card">
+                    <div class="icon">🧠</div>
+                    <h3>MLP Prioriseur</h3>
+                    <p>Analyse de l'importance des tâches via un <strong>réseau de neurones</strong> (Perceptron) codé nativement en Kotlin.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="icon">💼</div>
+                    <h3>Google Workspace</h3>
+                    <p>Intégration fluide avec <strong>Gmail et Drive</strong> pour analyser tes documents et préparer tes briefings.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="icon">🛡️</div>
+                    <h3>Sécurité</h3>
+                    <p>Chiffrement des communications et stockage sécurisé sur <strong>Supabase</strong>. Tu gardes le contrôle total.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="icon">🔌</div>
+                    <h3>Protocole MCP</h3>
+                    <p>Capacités étendues via le <strong>Model Context Protocol</strong> : recherche web et exécution d'outils.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="icon">⚡</div>
+                    <h3>Anticipation</h3>
+                    <p>Des <strong>Workers Android</strong> analysent tes notifications en arrière-plan pour te prévenir proactivement.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="icon">☁️</div>
+                    <h3>Mémoire</h3>
+                    <p>Sauvegarde synchronisée de tes préférences grâce à une architecture <strong>FastAPI + PostgreSQL</strong>.</p>
+                </div>
+            </section>
+
+            <section class="glass-box newsletter">
+                <h3>Rejoindre la Beta</h3>
+                <div class="input-group">
+                    <input type="email" id="adresse" placeholder="E-mail">
+                    <button onclick="changerAdresse()">Accéder</button>
+                </div>
+                <p id="msg-retour"></p>
+            </section>
+        </section>
+
+        <section id="pricing" class="tab-content">
+            <div class="glass-box pricing-card">
+                <h2>Version Alpha</h2>
+                <div class="price">Open Source</div>
+                <ul>
+                    <li>Code source complet sur GitHub</li>
+                    <li>Serveur MCP inclus</li>
+                    <li>Accès base de données Supabase</li>
+                </ul>
+                <div class="download-section">
+                    <p class="note">Besoin de l'APK pour tester ? Cliquez ci-dessous.</p>
+                    <button class="btn-glow" onclick="alert('Demande d\'APK envoyée !')">Demander l'APK</button>
+                </div>
             </div>
-            <div class="feature-card">
-                <div class="feature-icon">📅</div>
-                <div class="feature-title">Calendrier Intelligent</div>
-                <div class="feature-desc">Créez des événements, consultez votre planning et ne manquez plus jamais un rendez-vous.</div>
+        </section>
+
+        <section id="updates" class="tab-content">
+            <div class="glass-box">
+                <h2>Journal technique</h2>
+                <div class="changelog">
+					<div class="version-item">
+                        <span class="badge">v1.3.5</span>
+                        <ul>
+                            <li>Changement final de nom vers <strong>Axonys AI</strong></li>
+                            <li>Refonte visuelle ajout du <strong>Glassmorphism</strong> et stabilisation des menus de navigation </li>
+							<li>Stabilisation de l'orb et amelioration  de l'<strong>UIX</strong> (experience utilisateurs)</li>
+                        </ul>
+                    </div>
+                    <div class="version-item"> 
+                        <span class="badge">v1.3.0</span>
+                        <ul>
+                            <li>Migration vers <strong>Supabase</strong> pour la gestion multi-utilisateurs.</li>
+                            <li>Déploiement du serveur <strong>FastMCP</strong> pour les outils de recherche.</li>
+                        </ul>
+                    </div>
+                    <div class="version-item old">
+                        <span class="badge gray">v1.2.0</span>
+                        <ul>
+                            <li>Lancement du MlpPrioriseur (Scoring neuronal).</li>
+                            <li>Système de VoiceAssistant (STT/TTS).</li>
+                        </ul>
+                    </div>
+                </div>
             </div>
-            <div class="feature-card">
-                <div class="feature-icon">📝</div>
-                <div class="feature-title">Google Docs</div>
-                <div class="feature-desc">Créez et éditez vos documents directement depuis une conversation avec Jarvis.</div>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">🧠</div>
-                <div class="feature-title">Priorisation IA</div>
-                <div class="feature-desc">Un réseau de neurones analyse vos tâches et les classe par ordre de priorité intelligemment.</div>
-            </div>
-        </div>
-        <a href="https://github.com/antmusic/CortexAI/releases" class="cta">Télécharger l'APK</a>
-    </div>
-    <div class="footer">
-        <p>© 2024 Cortex IA — Développé par Antoine Drai — Version 1.1.0 "Cognitive"</p>
-        <p><a href="privacy.html">Politique de Confidentialité</a></p>
+        </section>
+
+        <footer class="footer">
+            <p>© 2026 Axonys AI - Antoine Drai - <a href="https://github.com/adr2801/AxonysAI" target="_blank">Repository Officiel</a></p>
+        </footer>
     </div>
 </body>
 </html>
