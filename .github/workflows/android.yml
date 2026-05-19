@@ -49,8 +49,8 @@ jobs:
 
 
 
-        name: "Axonys AI(Application Android)"
-        body: "Téléchargez l'application Cortex IA directement depuis cette page !"
+        name: "Axonys AI (Application Android)"
+        body: "Téléchargez l'application Axonys AI directement depuis cette page !"
         files: AxonysAndroidApp/app/build/outputs/apk/debug/AxonysAI.apk
         prerelease: true
       env:
