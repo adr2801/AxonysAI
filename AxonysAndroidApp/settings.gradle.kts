@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "CortexAndroidApp"
+rootProject.name = "AxonysAndroidApp"
 include(":app")

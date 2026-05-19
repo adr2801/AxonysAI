@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.cortex.ai"
+    namespace = "com.axonys.ai"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.cortex.ai"
+        applicationId = "com.axonys.ai"
         minSdk = 24
         targetSdk = 34
         versionCode = 9
@@ -17,7 +17,7 @@ android {
 
 
 
-        setProperty("archivesBaseName", "CortexAI")
+        setProperty("archivesBaseName", "AxonysAI")
 
 
 
@@ -37,7 +37,7 @@ android {
     applicationVariants.all {
         outputs.all {
             val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
-            output.outputFileName = "CortexAI.apk"
+            output.outputFileName = "AxonysAI.apk"
         }
     }
 

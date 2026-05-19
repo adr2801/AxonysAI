@@ -101,7 +101,7 @@ if plt.get_fignums():
 @mcp.tool()
 async def read_project_file(relative_path: str) -> str:
     """LIT UN FICHIER DU PROJET (Code, Cours, Notes). 
-    Le chemin doit être relatif à la racine du projet CortexAI."""
+    Le chemin doit être relatif à la racine du projet AxonysAI."""
     try:
         # On remonte d'un cran car on est dans 'backend'
         root_dir = BASE_DIR.parent

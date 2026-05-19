@@ -1,11 +1,11 @@
-# CortexAI (Jarvis)
+# Axonys AI (Jarvis)
 
-CortexAI est un projet visant à implémenter une intelligence artificielle proactive et personnalisée sous la forme d'un majordome ("Jarvis"). Il se décompose en un serveur backend Python (pour le moteur cognitif) et une application cliente Android.
+Axonys AI est un projet visant à implémenter une intelligence artificielle proactive et personnalisée sous la forme d'un majordome ("Jarvis"). Il se décompose en un serveur backend Python (pour le moteur cognitif) et une application cliente Android.
 
 ## Structure du Projet
 
 - **`backend/`** : Le moteur Python qui fait tourner l'intelligence artificielle (Jarvis), la gestion de la mémoire, et le serveur API.
-- **`CortexAndroidApp/`** : L'application mobile Android permettant à l'utilisateur de discuter avec Jarvis, de recevoir des notifications et de gérer son espace.
+- **`AxonysAndroidApp/`** : L'application mobile Android permettant à l'utilisateur de discuter avec Jarvis, de recevoir des notifications et de gérer son espace.
 - **`docs/`** : Documentation du projet.
 
 ## 1. Lancer le Backend (Serveur Python)
@@ -46,7 +46,7 @@ Le serveur sera alors accessible localement sur le port `7860`.
 
 ## 2. Compiler et Lancer l'Application Android
 
-Le dossier `CortexAndroidApp/` contient un projet Gradle standard pour Android.
+Le dossier `AxonysAndroidApp/` contient un projet Gradle standard pour Android.
 
 ### Prérequis
 - Android Studio ou les outils en ligne de commande Android (SDK)
@@ -54,7 +54,7 @@ Le dossier `CortexAndroidApp/` contient un projet Gradle standard pour Android.
 
 ### Lancement via Android Studio
 1. Ouvrez **Android Studio**.
-2. Cliquez sur **Open** et sélectionnez le dossier `CortexAndroidApp/`.
+2. Cliquez sur **Open** et sélectionnez le dossier `AxonysAndroidApp/`.
 3. Attendez la synchronisation Gradle.
 4. Cliquez sur **Run** (bouton vert) pour déployer sur un émulateur ou un téléphone connecté.
 

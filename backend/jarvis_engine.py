@@ -191,7 +191,7 @@ class JarvisEngine:
                 all_modes = memory_manager.get_user_modes(session_id)
                 target_mode = next((m for m in all_modes if m["name"].lower() == mode.lower()), None)
                 if target_mode:
-                    mode_instruction = f"\n\n🎭 [MODE ACTIF : {target_mode['name'].upper()}]\n{target_mode['instruction']}"
+                    mode_instruction = f"\n\n🎭 [MODE ACTIF : {target_mode['name'].upper()}]\n{target_mode['instruction'].replace('{user_name}', user_name)}"
 
             instruction = f"""Tu es JARVIS, le majordome IA de {user_name}. Date actuelle: {date_str}. Position GPS: {context.lat}, {context.lng}.{user_facts_str}{prefs_str}{mode_instruction}
 
