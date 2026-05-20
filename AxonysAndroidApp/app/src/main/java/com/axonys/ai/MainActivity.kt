@@ -311,6 +311,9 @@ class MainActivity : ComponentActivity() {
                                 mutableStateOf<JarvisNotification?>(null)
                         }
                         val coroutineScope = rememberCoroutineScope()
+                        LaunchedEffect(currentUserId) {
+                                prefs.edit().putString("user_id", currentUserId).apply()
+                        }
                         val onPickImage: ((Uri) -> Unit) -> Unit = { callback ->
                                 onImageSelected = callback
                                 imagePickerLauncher.launch("image/*")

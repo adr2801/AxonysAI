@@ -19,6 +19,10 @@ class AnticipationWorker(context: Context, params: WorkerParameters) : Coroutine
         try {
             val prefs = applicationContext.getSharedPreferences("AxonysPrefs", Context.MODE_PRIVATE)
             val token = prefs.getString("google_id_token", null)
+            val userId = prefs.getString("user_id", null) ?: android.provider.Settings.Secure.getString(
+                applicationContext.contentResolver,
+                android.provider.Settings.Secure.ANDROID_ID
+            ) ?: "default_device"
             val name = prefs.getString("user_name", "Antoine")
             
             Log.d("JarvisAnticipate", "Déclenchement de la réflexion proactive...")
@@ -26,6 +30,7 @@ class AnticipationWorker(context: Context, params: WorkerParameters) : Coroutine
             val response = JarvisApiClient.apiService.anticipate(ChatRequest(
                 prompt = "Analyse proactive",
                 google_token = token,
+                user_id = userId,
                 user_name = name
             ))
             

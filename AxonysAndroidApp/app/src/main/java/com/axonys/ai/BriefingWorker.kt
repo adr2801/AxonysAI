@@ -18,14 +18,24 @@ class BriefingWorker(context: Context, params: WorkerParameters) : CoroutineWork
         try {
             val prefs = applicationContext.getSharedPreferences("AxonysPrefs", Context.MODE_PRIVATE)
             val token = prefs.getString("google_id_token", null)
-            val name = prefs.getString("user_name", "Antoine") // On récupère le nom sauvegardé
+            val userId = prefs.getString("user_id", null) ?: android.provider.Settings.Secure.getString(
+                applicationContext.contentResolver,
+                android.provider.Settings.Secure.ANDROID_ID
+            ) ?: "default_device"
+            val name = prefs.getString("user_name", "Antoine")
             
             val recentNotifs = NotificationService.getRecentNotifications()
             val prompt = "Génère un briefing matinal complet pour $name en analysant ces notifications récentes : $recentNotifs. Sois poli et efficace comme un majordome britannique."
             
             // Appel API Jarvis (en spécifiant le thread 'briefing')
             val response = JarvisApiClient.apiService.sendMessage(
-                ChatRequest(prompt, token, name, thread_id = "briefing")
+                ChatRequest(
+                    prompt = prompt,
+                    google_token = token,
+                    user_id = userId,
+                    user_name = name,
+                    thread_id = "briefing"
+                )
             )
             val briefing = response.response ?: response.text ?: "Impossible de générer le briefing."
 
