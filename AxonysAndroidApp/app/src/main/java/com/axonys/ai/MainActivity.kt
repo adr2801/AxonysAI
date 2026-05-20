@@ -2465,56 +2465,61 @@ fun JarvisScreen(
                                                                                 var fullText = ""
                                                                                 val initialJarvisMsg = JarvisChatMessage(text = "", isUser = false, isThinking = true)
                                                                                 var streamWithJarvis = updatedWithUser + initialJarvisMsg
-
-                                                                                reader.use { br ->
-                                                                                    br.forEachLine { line ->
-                                                                                        if (line.startsWith("data: ")) {
-                                                                                            val json = line.substring(6)
-                                                                                            val data = gson.fromJson(json, Map::class.java)
-                                                                                            if (data["sentiment"] != null) {
-                                                                                                currentSentiment = data["sentiment"] as String
-                                                                                            }
-                                                                                            
-                                                                                            if (data["chunk"] != null) {
-                                                                                                isToolRunning = false // Cacher l'outil si du texte arrive
-                                                                                                fullText += data["chunk"] as String
-                                                                                                val updatedJarvisMsg = initialJarvisMsg.copy(text = fullText, isThinking = false)
-                                                                                                streamWithJarvis = updatedWithUser + updatedJarvisMsg
-                                                                                                
-                                                                                                val updatedStream = threadMessages.toMutableMap()
-                                                                                                updatedStream[currentThreadId] = streamWithJarvis
-                                                                                                threadMessages = updatedStream
-                                                                                                if (currentThreadId == "main") onMessagesChange(streamWithJarvis)
-                                                                                            }
-                                                                                            
-                                                                                            if (data["tool_use"] != null) {
-                                                                                                isToolRunning = true
-                                                                                                runningToolName = data["tool_use"] as String
-                                                                                                isOptimizing = false
-                                                                                            }
-                                                                                            
-                                                                                            if (data["done"] == true) {
-                                                                                                isToolRunning = false
-                                                                                                runningToolName = null
-                                                                                                val finalSentiment = data["sentiment"] as? String ?: "CALM"
-                                                                                                val finalImage = data["image_result"] as? String
-                                                                                                currentSentiment = finalSentiment
-                                                                                                
-                                                                                                val finalJarvisMsg = initialJarvisMsg.copy(
-                                                                                                    text = fullText,
-                                                                                                    isThinking = false,
-                                                                                                    imageResult = finalImage,
-                                                                                                    isNew = true
-                                                                                                )
-                                                                                                streamWithJarvis = updatedWithUser + finalJarvisMsg
-                                                                                                
-                                                                                                val updatedFinal = threadMessages.toMutableMap()
-                                                                                                updatedFinal[currentThreadId] = streamWithJarvis
-                                                                                                threadMessages = updatedFinal
-                                                                                                if (currentThreadId == "main") onMessagesChange(streamWithJarvis)
-                                                                                                
-                                                                                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                                                                                if (isAutoReadEnabled) voiceAssistant?.speak(fullText)
+                                                                                
+                                                                                withContext(Dispatchers.IO) {
+                                                                                    reader.use { br ->
+                                                                                        while (true) {
+                                                                                            val line = br.readLine() ?: break
+                                                                                            if (line.startsWith("data: ")) {
+                                                                                                val json = line.substring(6)
+                                                                                                val data = gson.fromJson(json, Map::class.java)
+                                                                                                withContext(Dispatchers.Main) {
+                                                                                                    if (data["sentiment"] != null) {
+                                                                                                        currentSentiment = data["sentiment"] as String
+                                                                                                    }
+                                                                                                    
+                                                                                                    if (data["chunk"] != null) {
+                                                                                                        isToolRunning = false // Cacher l'outil si du texte arrive
+                                                                                                        fullText += data["chunk"] as String
+                                                                                                        val updatedJarvisMsg = initialJarvisMsg.copy(text = fullText, isThinking = false)
+                                                                                                        streamWithJarvis = updatedWithUser + updatedJarvisMsg
+                                                                                                        
+                                                                                                        val updatedStream = threadMessages.toMutableMap()
+                                                                                                        updatedStream[currentThreadId] = streamWithJarvis
+                                                                                                        threadMessages = updatedStream
+                                                                                                        if (currentThreadId == "main") onMessagesChange(streamWithJarvis)
+                                                                                                    }
+                                                                                                    
+                                                                                                    if (data["tool_use"] != null) {
+                                                                                                        isToolRunning = true
+                                                                                                        runningToolName = data["tool_use"] as String
+                                                                                                        isOptimizing = false
+                                                                                                    }
+                                                                                                    
+                                                                                                    if (data["done"] == true) {
+                                                                                                        isToolRunning = false
+                                                                                                        runningToolName = null
+                                                                                                        val finalSentiment = data["sentiment"] as? String ?: "CALM"
+                                                                                                        val finalImage = data["image_result"] as? String
+                                                                                                        currentSentiment = finalSentiment
+                                                                                                        
+                                                                                                        val finalJarvisMsg = initialJarvisMsg.copy(
+                                                                                                            text = fullText,
+                                                                                                            isThinking = false,
+                                                                                                            imageResult = finalImage,
+                                                                                                            isNew = true
+                                                                                                        )
+                                                                                                        streamWithJarvis = updatedWithUser + finalJarvisMsg
+                                                                                                        
+                                                                                                        val updatedFinal = threadMessages.toMutableMap()
+                                                                                                        updatedFinal[currentThreadId] = streamWithJarvis
+                                                                                                        threadMessages = updatedFinal
+                                                                                                        if (currentThreadId == "main") onMessagesChange(streamWithJarvis)
+                                                                                                        
+                                                                                                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                                                                                        if (isAutoReadEnabled) voiceAssistant?.speak(fullText)
+                                                                                                    }
+                                                                                                }
                                                                                             }
                                                                                         }
                                                                                     }

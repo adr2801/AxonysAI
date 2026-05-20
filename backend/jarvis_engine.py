@@ -331,8 +331,27 @@ Réponds TOUJOURS en français, de façon concise et élégante.
         # Le streaming avec Gemini et auto_function_calling nécessite une itération sur le flux
         response_stream = await loop.run_in_executor(None, lambda: chat_session.send_message_stream(message_parts))
         
+        queue = asyncio.Queue()
+        
+        def consume_stream():
+            try:
+                for chunk in response_stream:
+                    loop.call_soon_threadsafe(queue.put_nowait, chunk)
+                loop.call_soon_threadsafe(queue.put_nowait, None)
+            except Exception as e:
+                loop.call_soon_threadsafe(queue.put_nowait, e)
+                
+        threading.Thread(target=consume_stream, daemon=True).start()
+        
         full_text = ""
-        for chunk in response_stream:
+        while True:
+            chunk = await queue.get()
+            if chunk is None:
+                break
+            if isinstance(chunk, Exception):
+                print(f"Erreur lors du stream en arrière-plan: {chunk}")
+                break
+                
             # Détection d'appel d'outil (Function Calling)
             if chunk.candidates and chunk.candidates[0].content.parts:
                 for part in chunk.candidates[0].content.parts:
