@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="description" content="Découvrez Axonys AI, l'agent autonome open source pour Android. Intégration Google Workspace, sécurité Supabase et protocole MCP.">
+    <title>Axonys AI - Agent Autonome Android & Assistant Google Workspace</title>
+    <link rel="stylesheet" href="stylesheet.css">
+	<link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAu0lEQVR4nO1VMRJAMBDEKDyJ2reUvpU6RuM7qVAxRIa73EYYtnKZ3O66JUmSH19HKmkulZmW564uvLgyhLirDm4Ahfca8M0cim3ut38DLkFfE1ENeE3gTOiWKSANsCdAEQg6BbQB8gRKZSYOMXUvyQD30uEcUqSNkkyvzES/C0jg5i/tcxKF6r2MAPEGIo7QBnLXYtZq6EnW62HlHJtq91ccIrDFez2IxG2+Qy1iB+B5BuyM7JoLNN8POGaeb3vJAkbdOgAAAABJRU5ErkJggg==">
+	<meta name="google-site-verification" content="JItMdHyM06m0RedKoFdBfNLvHbP4wW1DcB9pfbyWgpI" />
+    <script src="site javascript.js" defer></script>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="bg-glow"></div>
+
+    <nav class="tab-navigation">
+        <button class="tab-btn active" data-target="home">Système</button>
+        <button class="tab-btn" data-target="pricing">Distribution</button>
+        <button class="tab-btn" data-target="updates">Changelog</button>
+        <a href="https://github.com/adr2801/AxonysAI" target="_blank" class="github-link-btn">
+            <img src="https://cdn.jsdelivr.net/npm/simple-icons@v9/icons/github.svg" width="18" height="18" alt="GitHub" style="filter: invert(1); vertical-align: middle; margin-right: 6px;"> GitHub
+        </a>
+    </nav>
+
+    <div class="main-wrapper">
+        
+        <section id="home" class="tab-content active">
+            <header class="hero">
+                <h1 class="glitch-text">Axonys <span>AI</span></h1>
+                <p>L'agent autonome conçu pour l'efficacité.</p>
+            </header>
+
+            <section class="features-grid">
+                <div class="feature-card">
+                    <div class="icon">🧠</div>
+                    <h2 style="font-size: 1.2rem; margin: 15px 0 10px 0; color: #38bdf8;">MLP Prioriseur</h2>
+                    <p>Analyse de l'importance des tâches via un <strong>réseau de neurones</strong> (Perceptron) codé nativement en Kotlin.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="icon">💼</div>
+                    <h2 style="font-size: 1.2rem; margin: 15px 0 10px 0; color: #38bdf8;">Google Workspace</h2>
+                    <p>Intégration fluide avec <strong>Gmail et Drive</strong> pour analyser tes documents et préparer tes briefings.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="icon">🛡️</div>
+                    <h2 style="font-size: 1.2rem; margin: 15px 0 10px 0; color: #38bdf8;">Sécurité</h2>
+                    <p>Chiffrement des communications et stockage sécurisé sur <strong>Supabase</strong>. Tu gardes le contrôle total.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="icon">🔌</div>
+                    <h2 style="font-size: 1.2rem; margin: 15px 0 10px 0; color: #38bdf8;">Protocole MCP</h2>
+                    <p>Capacités étendues via le <strong>Model Context Protocol</strong> : recherche web et exécution d'outils.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="icon">⚡</div>
+                    <h2 style="font-size: 1.2rem; margin: 15px 0 10px 0; color: #38bdf8;">Anticipation</h2>
+                    <p>Des <strong>Workers Android</strong> analysent tes notifications en arrière-plan pour te prévenir proactivement.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="icon">☁️</div>
+                    <h2 style="font-size: 1.2rem; margin: 15px 0 10px 0; color: #38bdf8;">Mémoire</h2>
+                    <p>Sauvegarde synchronisée de tes préférences grâce à une architecture <strong>FastAPI + PostgreSQL</strong>.</p>
+                </div>
+            </section>
+
+            <section class="glass-box newsletter">
+                <h3>Rejoindre la Beta</h3>
+                <div class="input-group">
+                    <input type="email" id="adresse" placeholder="E-mail">
+                    <button onclick="changerAdresse()">Accéder</button>
+                </div>
+                <p id="msg-retour"></p>
+            </section>
+        </section>
+
+        <section id="pricing" class="tab-content">
+            <div class="glass-box pricing-card">
+                <h2>Version Alpha</h2>
+                <div class="price">Open Source</div>
+                <ul>
+                    <li>Code source complet sur GitHub</li>
+                    <li>Serveur MCP inclus</li>
+                    <li>Accès base de données Supabase</li>
+                </ul>
+                <div class="download-section">
+                    <p class="note">Besoin de l'APK pour tester ? Cliquez ci-dessous.</p>
+                    <button class="btn-glow" onclick="alert('Demande d\'APK envoyée !')">Demander l'APK</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="updates" class="tab-content">
+            <div class="glass-box">
+                <h2>Journal technique</h2>
+                <div class="changelog">
+					<div class="version-item">
+                        <span class="badge">v1.3.5</span>
+                        <ul>
+                            <li>Changement final de nom vers <strong>Axonys AI</strong></li>
+                            <li>Refonte visuelle ajout du <strong>Glassmorphism</strong> et stabilisation des menus de navigation </li>
+							<li>Stabilisation de l'orb et amelioration  de l'<strong>UIX</strong> (experience utilisateurs)</li>
+                        </ul>
+                    </div>
+                    <div class="version-item"> 
+                        <span class="badge">v1.3.0</span>
+                        <ul>
+                            <li>Migration vers <strong>Supabase</strong> pour la gestion multi-utilisateurs.</li>
+                            <li>Déploiement du serveur <strong>FastMCP</strong> pour les outils de recherche.</li>
+                        </ul>
+                    </div>
+                    <div class="version-item old">
+                        <span class="badge gray">v1.2.0</span>
+                        <ul>
+                            <li>Lancement du MlpPrioriseur (Scoring neuronal).</li>
+                            <li>Système de VoiceAssistant (STT/TTS).</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <footer class="footer">
+            <p>© 2026 Axonys AI - Antoine Drai - <a href="https://github.com/adr2801/AxonysAI" target="_blank">Repository Officiel</a></p>
+            <p><a href="privacy.html" class="footer-btn" style="text-decoration: none; display: inline-block;">Politique de Confidentialité</a></p>
+        </footer>
+    </div>
+</body>
+</html>

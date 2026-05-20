@@ -49,6 +49,7 @@ jobs:
 
 
 
+
         name: "Axonys AI (Application Android)"
         body: "Téléchargez l'application Axonys AI directement depuis cette page !"
         files: AxonysAndroidApp/app/build/outputs/apk/debug/AxonysAI.apk
