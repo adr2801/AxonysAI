@@ -297,8 +297,10 @@ class MainActivity : ComponentActivity() {
                         var googleAccount by remember { mutableStateOf(lastAccount) }
                         val currentUserId =
                                 remember(googleAccount) {
-                                        googleAccount?.displayName?.lowercase()?.replace(" ", "_")
-                                                ?: "antoine"
+                                        googleAccount?.id ?: android.provider.Settings.Secure.getString(
+                                                context.contentResolver,
+                                                android.provider.Settings.Secure.ANDROID_ID
+                                        ) ?: "default_device"
                                 }
                         val currentUserName =
                                 remember(googleAccount) {
@@ -2444,12 +2446,13 @@ fun JarvisScreen(
                                                                                     if (freshToken != null) token = freshToken
                                                                                     JarvisApiClient.apiService.streamMessage(
                                                                                         ChatRequest(
-                                                                                            userMsg,
-                                                                                            token,
-                                                                                            currentUserId,
-                                                                                            lat,
-                                                                                            lng,
-                                                                                            currentThreadId,
+                                                                                            prompt = userMsg,
+                                                                                            google_token = token,
+                                                                                            user_id = currentUserId,
+                                                                                            user_name = currentUserName,
+                                                                                            lat = lat,
+                                                                                            lng = lng,
+                                                                                            thread_id = currentThreadId,
                                                                                             mode = currentMode,
                                                                                             image_base64 = selectedImageBase64
                                                                                         )

@@ -157,7 +157,9 @@ class JarvisEngine:
                         parts = []
                         for p in parts_data:
                             if "text" in p:
-                                parts.append(types.Part(text=p["text"]))
+                                import re
+                                clean_text = re.sub(r'^\[CONTEXTE :.*?\n\n', '', p["text"], flags=re.DOTALL)
+                                parts.append(types.Part(text=clean_text))
                             elif "function_call" in p:
                                 # Si on avait stocké des appels de fonction, on les reconstruirait ici
                                 # Pour l'instant, on se concentre sur la robustesse du texte
@@ -289,19 +291,18 @@ Réponds TOUJOURS en français, de façon concise et élégante.
         self.last_sentiment = "CALM"
         return ""
 
-    async def process_query_stream(self, prompt: str, google_token: Optional[str] = None, user_name: str = "Antoine", lat: Optional[float] = None, lng: Optional[float] = None, thread_id: str = "main", save_to_history: bool = True, mode: Optional[str] = None, image_base64: Optional[str] = None):
+    async def process_query_stream(self, prompt: str, google_token: Optional[str] = None, user_id: str = "default_user", user_name: str = "Utilisateur", lat: Optional[float] = None, lng: Optional[float] = None, thread_id: str = "main", save_to_history: bool = True, mode: Optional[str] = None, image_base64: Optional[str] = None):
         self.last_image_result = None
         if not mode:
             mode = await self._detect_mode(prompt)
             
         context.token, context.lat, context.lng = google_token, lat, lng
-        safe_user_name = "".join(c for c in user_name if c.isalnum() or c in (' ', '_')).replace(" ", "_").lower() or "default"
-        context.user_id = safe_user_name
-        chat_session = await self._get_session(safe_user_name, user_name, thread_id, mode)
+        context.user_id = user_id
+        chat_session = await self._get_session(user_id, user_name, thread_id, mode)
         
         now_paris = datetime.now(ZoneInfo("Europe/Paris"))
         date_str = now_paris.strftime("%A %d %B %Y, %H:%M")
-        relevant_facts = memory_manager.get_relevant_facts(safe_user_name, current_query=prompt, top_k=3)
+        relevant_facts = memory_manager.get_relevant_facts(user_id, current_query=prompt, top_k=3)
         
         context_parts = [f"Date actuelle: {date_str}"]
         if lat and lng: context_parts.append(f"Position GPS précise: {lat:.4f}, {lng:.4f}")
@@ -365,9 +366,9 @@ Réponds TOUJOURS en français, de façon concise et élégante.
         if save_to_history and full_text:
             model_parts = [types.Part(text=full_text)]
             self.sessions_history[full_id].append(types.Content(role="model", parts=model_parts))
-            self._append_to_history(safe_user_name, "model", model_parts, thread_id)
+            self._history_queues[full_id].put_nowait((user_id, "model", model_parts, thread_id))
 
-    async def process_query(self, prompt: str, google_token: Optional[str] = None, user_name: str = "Antoine", lat: Optional[float] = None, lng: Optional[float] = None, thread_id: str = "main", save_to_history: bool = True, mode: Optional[str] = None, image_base64: Optional[str] = None) -> str:
+    async def process_query(self, prompt: str, google_token: Optional[str] = None, user_id: str = "default_user", user_name: str = "Utilisateur", lat: Optional[float] = None, lng: Optional[float] = None, thread_id: str = "main", save_to_history: bool = True, mode: Optional[str] = None, image_base64: Optional[str] = None) -> str:
         self.last_image_result = None
         # 0. Détection automatique du mode si non spécifié
         if not mode:
@@ -375,14 +376,13 @@ Réponds TOUJOURS en français, de façon concise et élégante.
             if mode: print(f"--- Jarvis bascule automatiquement en mode: {mode} ---")
             
         context.token, context.lat, context.lng = google_token, lat, lng
-        safe_user_name = "".join(c for c in user_name if c.isalnum() or c in (' ', '_')).replace(" ", "_").lower() or "default"
-        context.user_id = safe_user_name
-        chat_session = await self._get_session(safe_user_name, user_name, thread_id, mode)
+        context.user_id = user_id
+        chat_session = await self._get_session(user_id, user_name, thread_id, mode)
         # On injecte l'heure réelle de Paris à chaque message
         now_paris = datetime.now(ZoneInfo("Europe/Paris"))
         date_str = now_paris.strftime("%A %d %B %Y, %H:%M")
         
-        relevant_facts = memory_manager.get_relevant_facts(safe_user_name, current_query=prompt, top_k=3)
+        relevant_facts = memory_manager.get_relevant_facts(user_id, current_query=prompt, top_k=3)
         
         context_parts = [f"Date actuelle: {date_str}"]
         if lat and lng:
@@ -411,12 +411,12 @@ Réponds TOUJOURS en français, de façon concise et élégante.
                 print(f"Erreur décodage image: {e}")
 
         try:
-            full_id = f"{safe_user_name}_{thread_id}"
+            full_id = f"{user_id}_{thread_id}"
             if save_to_history:
                 if full_id not in self.sessions_history: self.sessions_history[full_id] = []
                 user_content = types.Content(role="user", parts=message_parts)
                 self.sessions_history[full_id].append(user_content)
-                self._append_to_history(safe_user_name, "user", user_content.parts, thread_id)
+                self._history_queues[full_id].put_nowait((user_id, "user", user_content.parts, thread_id))
             
             # --- Logique de Retry avec Backoff ---
             max_retries = 3
@@ -440,6 +440,7 @@ Réponds TOUJOURS en français, de façon concise et élégante.
                 loop = asyncio.get_event_loop()
                 # Appel au modèle principal avec retry
                 response = await send_with_retry(chat_session, message_parts)
+                response_text = response.text
             except Exception as e:
                 print(f"⚠️ Modèle principal ({self.model_id}) en échec après retries : {e}. Tentative de repli sur {self.fallback_model_id}...")
                 try:
@@ -447,7 +448,7 @@ Réponds TOUJOURS en français, de façon concise et élégante.
                     hist = self.sessions_history.get(full_id, [])
                     fallback_history = hist[:-1] if save_to_history and len(hist) > 0 else hist
                     
-                    mode_id = f"{safe_user_name}_{thread_id}_{mode}" if mode else f"{safe_user_name}_{thread_id}"
+                    mode_id = f"{user_id}_{thread_id}_{mode}" if mode else f"{user_id}_{thread_id}"
                     config = self.sessions_configs.get(mode_id)
 
                     fallback_chat = client.chats.create(
@@ -458,6 +459,7 @@ Réponds TOUJOURS en français, de façon concise et élégante.
 
                     # Tentative d'envoi avec le modèle de secours (aussi avec retry)
                     response = await send_with_retry(fallback_chat, message_parts)
+                    response_text = response.text
                     print(f"✅ Repli réussi avec {self.fallback_model_id}")
                 except Exception as fallback_err:
                     import traceback
@@ -465,13 +467,15 @@ Réponds TOUJOURS en français, de façon concise et élégante.
                     print(traceback.format_exc())
                     return f"Désolé Antoine, les serveurs de Google semblent saturés en ce moment (Erreur 500 persistante). Réessaye dans quelques instants. (Détail: {str(fallback_err)})"
 
-            if save_to_history:
+            if "MÉMORISE ÇA :" in response_text or "JE RETIENS :" in response_text:
+                asyncio.create_task(self._auto_save_memory(user_id, prompt, response_text, mode_id))
 
-                model_parts = [types.Part(text=response.text)]
+            if save_to_history:
+                model_parts = [types.Part(text=response_text)]
                 self.sessions_history[full_id].append(types.Content(role="model", parts=model_parts))
-                self._append_to_history(safe_user_name, "model", model_parts, thread_id)
+                self._history_queues[full_id].put_nowait((user_id, "model", model_parts, thread_id))
             
-            return response.text
+            return response_text
 
 
         except Exception as e:

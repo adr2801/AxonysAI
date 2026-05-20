@@ -14,6 +14,7 @@ import retrofit2.http.Header
 data class ChatRequest(
     val prompt: String, 
     val google_token: String? = null, 
+    val user_id: String,
     val user_name: String? = "Antoine",
     val lat: Double? = null,
     val lng: Double? = null,
@@ -146,6 +147,29 @@ object JarvisApiClient {
         .connectTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
         .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
         .writeTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+        .addInterceptor { chain ->
+            var request = chain.request()
+            var response: okhttp3.Response? = null
+            var exception: java.io.IOException? = null
+            var tryCount = 0
+            val maxLimit = 3
+            
+            while (tryCount < maxLimit && (response == null || !response.isSuccessful)) {
+                try {
+                    response?.close()
+                    response = chain.proceed(request)
+                } catch (e: java.io.IOException) {
+                    exception = e
+                }
+                if (response?.isSuccessful == true) break
+                tryCount++
+                if (tryCount < maxLimit) {
+                    // Attendre 2 secondes avant de réessayer (laisse le temps au Space de se réveiller)
+                    Thread.sleep(2000)
+                }
+            }
+            response ?: throw exception ?: java.io.IOException("Unknown error during request retry")
+        }
         .build()
 
     val apiService: JarvisApiService by lazy {

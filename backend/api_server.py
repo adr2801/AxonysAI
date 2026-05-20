@@ -37,7 +37,8 @@ from typing import Optional
 class ChatRequest(BaseModel):
     prompt: str
     google_token: Optional[str] = None
-    user_name: Optional[str] = "Antoine"
+    user_id: str = "default_user"
+    user_name: Optional[str] = "Utilisateur"
     lat: Optional[float] = None
     lng: Optional[float] = None
     thread_id: Optional[str] = "main"
@@ -78,6 +79,7 @@ async def chat_stream(request: ChatRequest):
             async for chunk in jarvis.process_query_stream(
                 prompt=request.prompt,
                 google_token=request.google_token,
+                user_id=request.user_id,
                 user_name=request.user_name,
                 lat=request.lat,
                 lng=request.lng,
@@ -104,6 +106,7 @@ async def chat(request: ChatRequest):
         response_text = await jarvis.process_query(
             request.prompt, 
             google_token=request.google_token, 
+            user_id=request.user_id,
             user_name=request.user_name,
             lat=request.lat,
             lng=request.lng,
@@ -224,10 +227,8 @@ async def get_thread_history(thread_id: str, user_id: str):
             except Exception:
                 pass
             
-            # Nettoyage des balises
-            text = re.sub(r'\[CONTEXTE.*?\]\n?', '', text, flags=re.DOTALL)
-            text = re.sub(r'\[DATE.*?\]\n?', '', text, flags=re.DOTALL)
-            
+            # Nettoyage de tout le contexte injecté au début du message (incluant émotion et lieu)
+            text = re.sub(r'^\[CONTEXTE :.*?\n\n', '', text, flags=re.DOTALL)
             if "Génère un briefing matinal" in text or "Analyse mes notifications" in text:
                 continue
                 
