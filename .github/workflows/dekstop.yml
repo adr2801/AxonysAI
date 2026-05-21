@@ -27,8 +27,14 @@ jobs:
     - name: Compiler le package Desktop
       run: ./gradlew :desktop:packageDistributionForCurrentOS
 
-    - name: Téléverser l'exécutable généré
-      uses: actions/upload-artifact@v4
+    - name: Publier sur la page Releases (Pas de quota)
+      uses: softprops/action-gh-release@v2
       with:
-        name: jarvis-desktop-app
-        path: desktop/build/compose/binaries/main/
+        tag_name: "v1.3.5"
+        name: "Axonys AI (Android & Desktop)"
+        body: "Téléchargez l'application Axonys AI pour Android (APK) et pour PC (Linux .deb) directement depuis cette page !"
+        files: |
+          desktop/build/compose/binaries/main/deb/*.deb
+        prerelease: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
