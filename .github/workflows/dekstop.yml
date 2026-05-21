@@ -9,6 +9,8 @@ on:
 jobs:
   build-desktop:
     runs-on: ubuntu-latest
+  run:
+        working-directory: AxonysAndroidApp
     
     steps:
     - name: Checkout du code
