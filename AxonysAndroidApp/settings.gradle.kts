@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "AxonysAndroidApp"
 include(":app")
+include(":desktop")

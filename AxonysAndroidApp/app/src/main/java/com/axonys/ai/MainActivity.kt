@@ -2467,6 +2467,7 @@ fun JarvisScreen(
                                                                                 val gson = Gson()
                                                                                 val reader = withContext(Dispatchers.IO) {
                                                                                     BufferedReader(InputStreamReader(responseBody.byteStream()))
+                                                                                    // TODO: Consider adding a timeout to the reader if readLine() can block indefinitely
                                                                                 }
                                                                                 var fullText = ""
                                                                                 val initialJarvisMsg = JarvisChatMessage(text = "", isUser = false, isThinking = true)
@@ -2480,6 +2481,19 @@ fun JarvisScreen(
                                                                                                 val json = line.substring(6)
                                                                                                 val data = gson.fromJson(json, Map::class.java)
                                                                                                 withContext(Dispatchers.Main) {
+                                                                                                    // Check for error message from backend
+                                                                                                    if (data["error"] != null) {
+                                                                                                        val backendError = data["error"] as String
+                                                                                                        val errMsg = JarvisChatMessage(
+                                                                                                            "Jarvis a rencontré une erreur: $backendError",
+                                                                                                            isUser = false,
+                                                                                                            isError = true
+                                                                                                        )
+                                                                                                        JarvisChatMessages = JarvisChatMessages + errMsg
+                                                                                                        Log.e("JarvisStream", "Backend Error: $backendError")
+                                                                                                        // Stop processing the stream on error
+                                                                                                        return@withContext // Exit the withContext block
+                                                                                                    }
                                                                                                     if (data["sentiment"] != null) {
                                                                                                         currentSentiment = data["sentiment"] as String
                                                                                                     }
@@ -2530,31 +2544,20 @@ fun JarvisScreen(
                                                                                         }
                                                                                     }
                                                                                 }
-                                                                        } catch (e: Exception) {
-                                                                                val errMsg =
-                                                                                        JarvisChatMessage(
-                                                                                                "Erreur de connexion.",
-                                                                                                isUser =
-                                                                                                        false,
-                                                                                                isError =
-                                                                                                        true
-                                                                                        )
-                                                                                val updatedErr =
-                                                                                        threadMessages
-                                                                                                .toMutableMap()
-                                                                                updatedErr[
-                                                                                        currentThreadId] =
-                                                                                        updatedWithUser +
-                                                                                                errMsg
-                                                                                threadMessages =
-                                                                                        updatedErr
-                                                                                if (currentThreadId ==
-                                                                                                "main"
-                                                                                )
-                                                                                        onMessagesChange(
-                                                                                                updatedWithUser +
-                                                                                                        errMsg
-                                                                                        )
+                                                                        }
+                                                                } catch (e: Exception) {
+                                                                        Log.e("JarvisStream", "Error processing stream: ${e.message}", e)
+                                                                        val errMsg = JarvisChatMessage(
+                                                                            "Erreur de connexion ou de traitement du flux. Veuillez réessayer.",
+                                                                            isUser = false,
+                                                                            isError = true
+                                                                        )
+                                                                        val updatedErr = threadMessages.toMutableMap()
+                                                                        updatedErr[currentThreadId] = updatedWithUser + errMsg
+                                                                        threadMessages = updatedErr
+                                                                        if (currentThreadId == "main") {
+                                                                            onMessagesChange(updatedWithUser + errMsg)
+                                                                        }
                                                                         } finally {
                                                                                 isLoading = false
                                                                                 isModelLaunching =
