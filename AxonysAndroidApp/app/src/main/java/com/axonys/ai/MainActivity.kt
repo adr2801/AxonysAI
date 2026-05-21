@@ -2592,7 +2592,7 @@ fun JarvisScreen(
                                                                                 FontWeight.Bold,
                                                                         color = Color.White
                                                                 )
-                                                        }
+                                                        
                                                 }
                                         }
                                         }
