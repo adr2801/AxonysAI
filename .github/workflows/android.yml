@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android APK & Desktop
 
 on:
   push:
@@ -38,21 +38,25 @@ jobs:
       run: gradle signingReport
       working-directory: ./AxonysAndroidApp
 
-    - name: Build with Gradle
+    - name: Build Android APK
       run: gradle assembleDebug
       working-directory: ./AxonysAndroidApp
 
+    # --- AJOUT : Étape de build pour la version Desktop ---
+    - name: Build Desktop App (.deb)
+      run: gradle :desktop:packageDistributionForCurrentOS
+      working-directory: ./AxonysAndroidApp
+
+    # --- MODIFICATION : Publication combinée des deux applications ---
     - name: Publier sur la page Releases (Pas de quota)
       uses: softprops/action-gh-release@v2
       with:
         tag_name: "v1.3.5"
-
-
-
-
-        name: "Axonys AI (Application Android)"
-        body: "Téléchargez l'application Axonys AI directement depuis cette page !"
-        files: AxonysAndroidApp/app/build/outputs/apk/debug/AxonysAI.apk
+        name: "Axonys AI (Android & Desktop)"
+        body: "Téléchargez l'application Axonys AI pour Android (APK) ou pour votre ordinateur (Linux .deb) directement depuis cette page !"
+        files: |
+          AxonysAndroidApp/app/build/outputs/apk/debug/AxonysAI.apk
+          AxonysAndroidApp/desktop/build/compose/binaries/main/deb/*.deb
         prerelease: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
