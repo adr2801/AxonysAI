@@ -9,7 +9,8 @@ on:
 jobs:
   build-desktop:
     runs-on: ubuntu-latest
-  run:
+  defaults:
+      run:
         working-directory: AxonysAndroidApp
     
     steps:
