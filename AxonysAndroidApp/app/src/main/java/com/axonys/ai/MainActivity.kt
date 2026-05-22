@@ -2358,194 +2358,145 @@ fun JarvisScreen(
 
                                         Spacer(modifier = Modifier.width(8.dp))
 
-                                        Surface(
-                                                onClick = {
-                                                        if (input.isNotBlank() && !isLoading) {
+                                        Box(
+                                                modifier = Modifier
+                                                        .size(48.dp)
+                                                        .clip(CircleShape)
+                                                        .background(threadColor)
+                                                        .clickable(enabled = input.isNotBlank() && !isLoading) {
+                                                            if (input.isNotBlank() && !isLoading) {
                                                                 val userMsg = input
                                                                 val updatedWithUser =
                                                                         currentMessages +
                                                                                 JarvisChatMessage(
-                                                                                        text =
-                                                                                                userMsg,
-                                                                                        isUser =
-                                                                                                true,
-                                                                                        isError =
-                                                                                                false
+                                                                                        text = userMsg,
+                                                                                        isUser = true,
+                                                                                        isError = false
                                                                                 )
-                                                                val updated =
-                                                                        threadMessages
-                                                                                .toMutableMap()
-                                                                updated[currentThreadId] =
-                                                                        updatedWithUser
+                                                                val updated = threadMessages.toMutableMap()
+                                                                updated[currentThreadId] = updatedWithUser
                                                                 threadMessages = updated
-                                                                if (currentThreadId == "main")
-                                                                        onMessagesChange(
-                                                                                updatedWithUser
-                                                                        )
+                                                                if (currentThreadId == "main") onMessagesChange(updatedWithUser)
                                                                 input = ""
 
                                                                 coroutineScope.launch {
-                                                                        if (selectedImageUri != null
-                                                                        ) {
-                                                                                try {
-                                                                                        val inputStream =
-                                                                                                context.contentResolver
-                                                                                                        .openInputStream(
-                                                                                                                selectedImageUri!!
-                                                                                                        )
-                                                                                        val bytes =
-                                                                                                inputStream
-                                                                                                        ?.readBytes()
-                                                                                        if (bytes !=
-                                                                                                        null
-                                                                                        ) {
-                                                                                                selectedImageBase64 =
-                                                                                                        android.util
-                                                                                                                .Base64
-                                                                                                                .encodeToString(
-                                                                                                                        bytes,
-                                                                                                                        android.util
-                                                                                                                                .Base64
-                                                                                                                                .DEFAULT
-                                                                                                                )
-                                                                                        }
-                                                                                } catch (
-                                                                                        e:
-                                                                                                Exception) {
-                                                                                        Log.e(
-                                                                                                "JarvisVision",
-                                                                                                "Erreur encodage image: ${e.message}"
-                                                                                        )
-                                                                                }
-                                                                                selectedImageUri =
-                                                                                        null
-                                                                        }
-
-                                                                        isLoading = true
-                                                                        isModelLaunching = true
-                                                                        isOptimizing = false
-                                                                        haptic.performHapticFeedback(
-                                                                                androidx.compose.ui
-                                                                                        .hapticfeedback
-                                                                                        .HapticFeedbackType
-                                                                                        .LongPress
-                                                                        )
-
-                                                                        // Timer pour le "fallback"
-                                                                        // visuel
-                                                                        launch {
-                                                                                kotlinx.coroutines
-                                                                                        .delay(5000)
-                                                                                if (isLoading)
-                                                                                        isOptimizing =
-                                                                                                true
-                                                                        }
-
+                                                                    if (selectedImageUri != null) {
                                                                         try {
-                                                                                val prefs = context.getSharedPreferences("AxonysPrefs", Context.MODE_PRIVATE)
-                                                                                var token = prefs.getString("google_id_token", null)
-                                                                                val responseBody = withContext(Dispatchers.IO) {
-                                                                                    val freshToken = onRefreshToken()
-                                                                                    if (freshToken != null) token = freshToken
-                                                                                    JarvisApiClient.apiService.streamMessage(
-                                                                                        ChatRequest(
-                                                                                            prompt = userMsg,
-                                                                                            google_token = token,
-                                                                                            user_id = currentUserId,
-                                                                                            user_name = currentUserName,
-                                                                                            lat = lat,
-                                                                                            lng = lng,
-                                                                                            thread_id = currentThreadId,
-                                                                                            mode = currentMode,
-                                                                                            image_base64 = selectedImageBase64
-                                                                                        )
-                                                                                    )
-                                                                                }
-                                                                                selectedImageBase64 = null
-                                                                                isModelLaunching = false
-                                                                                 
-                                                                                val gson = Gson()
-                                                                                val reader = withContext(Dispatchers.IO) {
-                                                                                    BufferedReader(InputStreamReader(responseBody.byteStream()))
-                                                                                    // TODO: Consider adding a timeout to the reader if readLine() can block indefinitely
-                                                                                }
-                                                                                var fullText = ""
-                                                                                val initialJarvisMsg = JarvisChatMessage(text = "", isUser = false, isThinking = true)
-                                                                                var streamWithJarvis = updatedWithUser + initialJarvisMsg
-                                                                                
-                                                                                withContext(Dispatchers.IO) {
-                                                                                    reader.use { br ->
-                                                                                        while (true) {
-                                                                                            val line = br.readLine() ?: break
-                                                                                            if (line.startsWith("data: ")) {
-                                                                                                val json = line.substring(6)
-                                                                                                val data = gson.fromJson(json, Map::class.java)
-                                                                                                withContext(Dispatchers.Main) {
-                                                                                                    // Check for error message from backend
-                                                                                                    if (data["error"] != null) {
-                                                                                                        val backendError = data["error"] as String
-                                                                                                        val errMsg = JarvisChatMessage(
-                                                                                                            "Jarvis a rencontré une erreur: $backendError",
-                                                                                                            isUser = false,
-                                                                                                            isError = true
-                                                                                                        )
-                                                                                                        JarvisChatMessage = JarvisChatMessage + errMsg
-                                                                                                        Log.e("JarvisStream", "Backend Error: $backendError")
-                                                                                                        // Stop processing the stream on error
-                                                                                                        return@withContext // Exit the withContext block
-                                                                                                    }
-                                                                                                    if (data["sentiment"] != null) {
-                                                                                                        currentSentiment = data["sentiment"] as String
-                                                                                                    }
-                                                                                                    
-                                                                                                    if (data["chunk"] != null) {
-                                                                                                        isToolRunning = false // Cacher l'outil si du texte arrive
-                                                                                                        fullText += data["chunk"] as String
-                                                                                                        val updatedJarvisMsg = initialJarvisMsg.copy(text = fullText, isThinking = false)
-                                                                                                        streamWithJarvis = updatedWithUser + updatedJarvisMsg
-                                                                                                        
-                                                                                                        val updatedStream = threadMessages.toMutableMap()
-                                                                                                        updatedStream[currentThreadId] = streamWithJarvis
-                                                                                                        threadMessages = updatedStream
-                                                                                                        if (currentThreadId == "main") onMessagesChange(streamWithJarvis)
-                                                                                                    }
-                                                                                                    
-                                                                                                    if (data["tool_use"] != null) {
-                                                                                                        isToolRunning = true
-                                                                                                        runningToolName = data["tool_use"] as String
-                                                                                                        isOptimizing = false
-                                                                                                    }
-                                                                                                    
-                                                                                                    if (data["done"] == true) {
-                                                                                                        isToolRunning = false
-                                                                                                        runningToolName = null
-                                                                                                        val finalSentiment = data["sentiment"] as? String ?: "CALM"
-                                                                                                        val finalImage = data["image_result"] as? String
-                                                                                                        currentSentiment = finalSentiment
-                                                                                                        
-                                                                                                        val finalJarvisMsg = initialJarvisMsg.copy(
-                                                                                                            text = fullText,
-                                                                                                            isThinking = false,
-                                                                                                            imageResult = finalImage,
-                                                                                                            isNew = true
-                                                                                                        )
-                                                                                                        streamWithJarvis = updatedWithUser + finalJarvisMsg
-                                                                                                        
-                                                                                                        val updatedFinal = threadMessages.toMutableMap()
-                                                                                                        updatedFinal[currentThreadId] = streamWithJarvis
-                                                                                                        threadMessages = updatedFinal
-                                                                                                        if (currentThreadId == "main") onMessagesChange(streamWithJarvis)
-                                                                                                        
-                                                                                                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                                                                                        if (isAutoReadEnabled) voiceAssistant?.speak(fullText)
-                                                                                                    }
-                                                                                                }
+                                                                            val inputStream = context.contentResolver.openInputStream(selectedImageUri!!)
+                                                                            val bytes = inputStream?.readBytes()
+                                                                            if (bytes != null) {
+                                                                                selectedImageBase64 = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
+                                                                            }
+                                                                        } catch (e: Exception) {
+                                                                            Log.e("JarvisVision", "Erreur encodage image: ${e.message}")
+                                                                        }
+                                                                        selectedImageUri = null
+                                                                    }
+
+                                                                    isLoading = true
+                                                                    isModelLaunching = true
+                                                                    isOptimizing = false
+                                                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+
+                                                                    launch {
+                                                                        kotlinx.coroutines.delay(5000)
+                                                                        if (isLoading) isOptimizing = true
+                                                                    }
+
+                                                                    try {
+                                                                        val prefs = context.getSharedPreferences("AxonysPrefs", Context.MODE_PRIVATE)
+                                                                        var token = prefs.getString("google_id_token", null)
+                                                                        val responseBody = withContext(Dispatchers.IO) {
+                                                                            val freshToken = onRefreshToken()
+                                                                            if (freshToken != null) token = freshToken
+                                                                            JarvisApiClient.apiService.streamMessage(
+                                                                                ChatRequest(
+                                                                                    prompt = userMsg,
+                                                                                    google_token = token,
+                                                                                    user_id = currentUserId,
+                                                                                    user_name = currentUserName,
+                                                                                    lat = lat,
+                                                                                    lng = lng,
+                                                                                    thread_id = currentThreadId,
+                                                                                    mode = currentMode,
+                                                                                    image_base64 = selectedImageBase64
+                                                                                )
+                                                                            )
+                                                                        }
+                                                                        selectedImageBase64 = null
+                                                                        isModelLaunching = false
+                                                                        
+                                                                        val gson = Gson()
+                                                                        val reader = withContext(Dispatchers.IO) {
+                                                                            BufferedReader(InputStreamReader(responseBody.byteStream()))
+                                                                        }
+                                                                        var fullText = ""
+                                                                        val initialJarvisMsg = JarvisChatMessage(text = "", isUser = false, isThinking = true)
+                                                                        var streamWithJarvis = updatedWithUser + initialJarvisMsg
+                                                                        
+                                                                        withContext(Dispatchers.IO) {
+                                                                            reader.use { br ->
+                                                                                while (true) {
+                                                                                    val line = br.readLine() ?: break
+                                                                                    if (line.startsWith("data: ")) {
+                                                                                        val json = line.substring(6)
+                                                                                        val data = gson.fromJson(json, Map::class.java)
+                                                                                        withContext(Dispatchers.Main) {
+                                                                                            if (data["error"] != null) {
+                                                                                                val backendError = data["error"] as String
+                                                                                                val errMsg = JarvisChatMessage(
+                                                                                                    "Jarvis a rencontré une erreur: $backendError",
+                                                                                                    isUser = false,
+                                                                                                    isError = true
+                                                                                                )
+                                                                                                JarvisChatMessages = JarvisChatMessages + errMsg
+                                                                                                Log.e("JarvisStream", "Backend Error: $backendError")
+                                                                                                return@withContext
+                                                                                            }
+                                                                                            if (data["sentiment"] != null) {
+                                                                                                currentSentiment = data["sentiment"] as String
+                                                                                            }
+                                                                                            if (data["chunk"] != null) {
+                                                                                                isToolRunning = false
+                                                                                                fullText += data["chunk"] as String
+                                                                                                val updatedJarvisMsg = initialJarvisMsg.copy(text = fullText, isThinking = false)
+                                                                                                streamWithJarvis = updatedWithUser + updatedJarvisMsg
+                                                                                                val updatedStream = threadMessages.toMutableMap()
+                                                                                                updatedStream[currentThreadId] = streamWithJarvis
+                                                                                                threadMessages = updatedStream
+                                                                                                if (currentThreadId == "main") onMessagesChange(streamWithJarvis)
+                                                                                            }
+                                                                                            if (data["tool_use"] != null) {
+                                                                                                isToolRunning = true
+                                                                                                runningToolName = data["tool_use"] as String
+                                                                                                isOptimizing = false
+                                                                                            }
+                                                                                            if (data["done"] == true) {
+                                                                                                isToolRunning = false
+                                                                                                runningToolName = null
+                                                                                                val finalSentiment = data["sentiment"] as? String ?: "CALM"
+                                                                                                val finalImage = data["image_result"] as? String
+                                                                                                currentSentiment = finalSentiment
+                                                                                                val finalJarvisMsg = initialJarvisMsg.copy(
+                                                                                                    text = fullText,
+                                                                                                    isThinking = false,
+                                                                                                    imageResult = finalImage,
+                                                                                                    isNew = true
+                                                                                                )
+                                                                                                streamWithJarvis = updatedWithUser + finalJarvisMsg
+                                                                                                val updatedFinal = threadMessages.toMutableMap()
+                                                                                                updatedFinal[currentThreadId] = streamWithJarvis
+                                                                                                threadMessages = updatedFinal
+                                                                                                if (currentThreadId == "main") onMessagesChange(streamWithJarvis)
+                                                                                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                                                                                if (isAutoReadEnabled) voiceAssistant?.speak(fullText)
                                                                                             }
                                                                                         }
                                                                                     }
                                                                                 }
+                                                                            }
                                                                         }
-                                                                } catch (e: Exception) {
+                                                                    } catch (e: Exception) {
                                                                         Log.e("JarvisStream", "Error processing stream: ${e.message}", e)
                                                                         val errMsg = JarvisChatMessage(
                                                                             "Erreur de connexion ou de traitement du flux. Veuillez réessayer.",
@@ -2558,47 +2509,34 @@ fun JarvisScreen(
                                                                         if (currentThreadId == "main") {
                                                                             onMessagesChange(updatedWithUser + errMsg)
                                                                         }
-                                                                        } finally {
-                                                                                isLoading = false
-                                                                                isModelLaunching =
-                                                                                        false
-                                                                                isModelLoading =
-                                                                                        false
-                                                                                isOptimizing = false
-                                                                        }
+                                                                    } finally {
+                                                                        isLoading = false
+                                                                        isModelLaunching = false
+                                                                        isModelLoading = false
+                                                                        isOptimizing = false
+                                                                    }
                                                                 }
-                                                        })
-                                                },
-                                                shape = CircleShape,
-                                                color = threadColor,
-                                                modifier = Modifier.size(48.dp),
-                                                enabled = input.isNotBlank() && !isLoading
-                                        {
-                                                Box(contentAlignment = Alignment.Center) {
+                                                            }
+                                                        }
+                                                    }
+                                                ) {
+                                                    Box(contentAlignment = Alignment.Center) {
                                                         if (isLoading) {
-                                                                CircularProgressIndicator(
-                                                                        modifier =
-                                                                                Modifier.size(
-                                                                                        22.dp
-                                                                                ),
-                                                                        color = Color.White,
-                                                                        strokeWidth = 2.dp
-                                                                )
+                                                            CircularProgressIndicator(
+                                                                modifier = Modifier.size(22.dp),
+                                                                color = Color.White,
+                                                                strokeWidth = 2.dp
+                                                            )
                                                         } else {
-                                                                Text(
-                                                                        "↑",
-                                                                        fontSize = 24.sp,
-                                                                        fontWeight =
-                                                                                FontWeight.Bold,
-                                                                        color = Color.White
-                                                                )
-                                                        
+                                                            Text(
+                                                                "↑",
+                                                                fontSize = 24.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = Color.White
+                                                            )
+                                                        }
+                                                    }
                                                 }
-                                        }
-                                        }
-                                }
-                        }
-                }
 
                 // --- VOILE DE FOND (Scrim) ---
                 androidx.compose.animation.AnimatedVisibility(
