@@ -2489,7 +2489,7 @@ fun JarvisScreen(
                                                                                                             isUser = false,
                                                                                                             isError = true
                                                                                                         )
-                                                                                                        JarvisChatMessages = JarvisChatMessages + errMsg
+                                                                                                        JarvisChatMessage = JarvisChatMessage + errMsg
                                                                                                         Log.e("JarvisStream", "Backend Error: $backendError")
                                                                                                         // Stop processing the stream on error
                                                                                                         return@withContext // Exit the withContext block
@@ -2567,13 +2567,13 @@ fun JarvisScreen(
                                                                                 isOptimizing = false
                                                                         }
                                                                 }
-                                                        }
+                                                        })
                                                 },
                                                 shape = CircleShape,
                                                 color = threadColor,
                                                 modifier = Modifier.size(48.dp),
                                                 enabled = input.isNotBlank() && !isLoading
-                                                {
+                                        {
                                                 Box(contentAlignment = Alignment.Center) {
                                                         if (isLoading) {
                                                                 CircularProgressIndicator(
