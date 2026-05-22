@@ -2363,7 +2363,7 @@ fun JarvisScreen(
                                                         .size(48.dp)
                                                         .clip(CircleShape)
                                                         .background(threadColor)
-                                                        .clickable(enabled = input.isNotBlank() && !isLoading) {
+                                                        .clickable {
                                                             if (input.isNotBlank() && !isLoading) {
                                                                 val userMsg = input
                                                                 val updatedWithUser =
@@ -2379,7 +2379,7 @@ fun JarvisScreen(
                                                                 if (currentThreadId == "main") onMessagesChange(updatedWithUser)
                                                                 input = ""
 
-                                                                coroutineScope.launch {
+                                                coroutineScope.launch {
                                                                     if (selectedImageUri != null) {
                                                                         try {
                                                                             val inputStream = context.contentResolver.openInputStream(selectedImageUri!!)
@@ -2449,7 +2449,13 @@ fun JarvisScreen(
                                                                                                     isUser = false,
                                                                                                     isError = true
                                                                                                 )
-                                                                                                JarvisChatMessages = JarvisChatMessages + errMsg
+                                                                                                val updatedWithErr = messages + errMsg
+                                                                                                val updatedThreadMessages = threadMessages.toMutableMap()
+                                                                                                updatedThreadMessages[currentThreadId] = updatedWithErr
+                                                                                                threadMessages = updatedThreadMessages
+                                                                                                if (currentThreadId == "main") {
+                                                                                                    onMessagesChange(updatedWithErr)
+                                                                                                }
                                                                                                 Log.e("JarvisStream", "Backend Error: $backendError")
                                                                                                 return@withContext
                                                                                             }
@@ -2504,10 +2510,10 @@ fun JarvisScreen(
                                                                             isError = true
                                                                         )
                                                                         val updatedErr = threadMessages.toMutableMap()
-                                                                        updatedErr[currentThreadId] = updatedWithUser + errMsg
+                                                                        updatedErr[currentThreadId] = messages + errMsg
                                                                         threadMessages = updatedErr
                                                                         if (currentThreadId == "main") {
-                                                                            onMessagesChange(updatedWithUser + errMsg)
+                                                                            onMessagesChange(messages + errMsg)
                                                                         }
                                                                     } finally {
                                                                         isLoading = false
@@ -2518,7 +2524,6 @@ fun JarvisScreen(
                                                                 }
                                                             }
                                                         }
-                                                    }
                                                 ) {
                                                     Box(contentAlignment = Alignment.Center) {
                                                         if (isLoading) {
@@ -3946,4 +3951,5 @@ fun ModeChip(
                         )
                 }
         }
+}
 }
