@@ -2573,7 +2573,7 @@ fun JarvisScreen(
                                                 color = threadColor,
                                                 modifier = Modifier.size(48.dp),
                                                 enabled = input.isNotBlank() && !isLoading
-                                        ) {
+                                                {
                                                 Box(contentAlignment = Alignment.Center) {
                                                         if (isLoading) {
                                                                 CircularProgressIndicator(
