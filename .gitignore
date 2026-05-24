@@ -49,3 +49,9 @@ CortexAndroidApp/build/
 CortexAndroidApp/app/build/
 *.apk
 *.aab
+
+AxonysAndroidApp/.gradle/
+AxonysAndroidApp/build/
+AxonysAndroidApp/app/build/
+*.apk
+*.aab
