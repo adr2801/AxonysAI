@@ -43,7 +43,7 @@ jobs:
       working-directory: ./AxonysAndroidApp
 
     # --- AJOUT : Étape de build pour la version Desktop ---
-    - name: Build Desktop App (.deb)
+    - name: Build Desktop App (.msi)
       run: gradle :desktop:packageMsi
       working-directory: ./AxonysAndroidApp
 
@@ -56,7 +56,7 @@ jobs:
         body: "Téléchargez l'application Axonys AI pour Android (APK) ou pour votre ordinateur (Linux .deb) directement depuis cette page !"
         files: |
           AxonysAndroidApp/app/build/outputs/apk/debug/AxonysAI.apk
-          AxonysAndroidApp/desktop/build/compose/binaries/main/deb/*.deb
+          AxonysAndroidApp/desktop/build/compose/binaries/main/deb/*.msi
         prerelease: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
