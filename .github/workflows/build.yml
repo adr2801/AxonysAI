@@ -5,14 +5,13 @@ on:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  build:
+  # ─── JOB 1 : Android APK + Desktop Linux .deb ───
+  build-linux:
     runs-on: ubuntu-latest
-    
-    # On donne la permission au script de créer une Release sur GitHub
-    permissions:
-      contents: write
-      
     steps:
     - uses: actions/checkout@v4
 
@@ -34,37 +33,77 @@ jobs:
       with:
         gradle-version: '8.7'
 
-    - name: Get SHA-1 Fingerprint
-      run: gradle signingReport
-      working-directory: ./AxonysAndroidApp
-
     - name: Build Android APK
       run: gradle assembleDebug
       working-directory: ./AxonysAndroidApp
 
-    # --- AJOUT : Étape de build pour la version Desktop ---
-    build-windows:
-      runs-on: windows-latest  
-      steps:
-        - uses: actions/checkout@v4
-        - uses: actions/setup-java@v4
-          with: { distribution: 'temurin', java-version: '17' }
-        - run: cd AxonysAndroidApp && ./gradlew :desktop:packageMsi
-        - uses: actions/upload-artifact@v4
-          with:
-            name: AxonysAI-MSI
-            path: AxonysAndroidApp/desktop/build/compose/binaries/main/msi/*.msi
+    - name: Build Desktop .deb (Linux)
+      run: gradle :desktop:packageDeb
+      working-directory: ./AxonysAndroidApp
 
-    # --- MODIFICATION : Publication combinée des deux applications ---
-    - name: Publier sur la page Releases (Pas de quota)
+    # Upload APK et .deb pour le job release
+    - uses: actions/upload-artifact@v4
+      with:
+        name: build-linux-artifacts
+        path: |
+          AxonysAndroidApp/app/build/outputs/apk/debug/*.apk
+          AxonysAndroidApp/desktop/build/compose/binaries/main/deb/*.deb
+
+  # ─── JOB 2 : Desktop MSI (sur Windows) ───
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: '8.7'
+
+    - name: Build Desktop .msi (Windows Installer)
+      run: gradle :desktop:packageMsi
+      working-directory: ./AxonysAndroidApp
+
+    # Upload .msi pour le job release
+    - uses: actions/upload-artifact@v4
+      with:
+        name: build-windows-artifacts
+        path: AxonysAndroidApp/desktop/build/compose/binaries/main/msi/*.msi
+
+  # ─── JOB 3 : Release (combine tout et publie) ───
+  release:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: build-linux-artifacts
+        path: ./artifacts/linux
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: build-windows-artifacts
+        path: ./artifacts/windows
+
+    - name: Publier sur la page Releases
       uses: softprops/action-gh-release@v2
       with:
         tag_name: "v1.3.5"
         name: "Axonys AI (Android & Desktop)"
-        body: "Téléchargez l'application Axonys AI pour Android (APK) ou pour votre ordinateur (Linux .deb) directement depuis cette page !"
+        body: |
+          📱 **Android** : APK
+          🐧 **Linux** : .deb
+          🪟 **Windows** : .msi (assistant d'installation)
         files: |
-          AxonysAndroidApp/app/build/outputs/apk/debug/AxonysAI.apk
-          AxonysAndroidApp/desktop/build/compose/binaries/main/deb/*.msi
+          ./artifacts/linux/**/*
+          ./artifacts/windows/**/*
         prerelease: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
