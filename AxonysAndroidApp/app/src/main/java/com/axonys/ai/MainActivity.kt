@@ -2705,8 +2705,12 @@ fun JarvisScreen(
                                 }
                         } // close Surface
                 } // close Box glassmorphism
-        }
-}
+                                        } // close Row (contrôles de saisie)
+                                } // close Column (contenu barre de saisie)
+                        } // close Surface (barre de saisie flottante)
+                } // close Column (chat principal)
+        } // close Box (conteneur JarvisScreen)
+} // close JarvisScreen
 
 @Composable
 fun SettingsScreen(
@@ -3952,5 +3956,4 @@ fun ModeChip(
                 }
         }
 }
-}
-}
+
