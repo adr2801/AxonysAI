@@ -226,19 +226,19 @@ class MainActivity : ComponentActivity() {
 
                 // Demande de permissions
                 val permissionsToRequest = mutableListOf<String>()
-                
+
                 // Micro (Nécessaire pour la voix dès Android 6.0)
                 if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                     permissionsToRequest.add(Manifest.permission.RECORD_AUDIO)
                 }
-                
+
                 // Notifications (Nécessaire à partir d'Android 13)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                         permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
                     }
                 }
-                
+
                 if (permissionsToRequest.isNotEmpty()) {
                     requestPermissionLauncher.launch(permissionsToRequest.toTypedArray())
                 }
@@ -2167,7 +2167,7 @@ fun JarvisScreen(
                                                                         contentScale = ContentScale.Crop
                                                                 )
                                                         }
-                                                        
+
                                                         // Bouton supprimer l'image
                                                         IconButton(
                                                                 onClick = { selectedImageUri = null },
@@ -2186,7 +2186,7 @@ fun JarvisScreen(
                                                         }
                                                 }
                                         }
-                                        
+
                                         Row(
                                                 modifier =
                                                         Modifier.padding(
@@ -2424,7 +2424,7 @@ fun JarvisScreen(
                                                                         }
                                                                         selectedImageBase64 = null
                                                                         isModelLaunching = false
-                                                                        
+
                                                                         val gson = Gson()
                                                                         val reader = withContext(Dispatchers.IO) {
                                                                             BufferedReader(InputStreamReader(responseBody.byteStream()))
@@ -2432,7 +2432,7 @@ fun JarvisScreen(
                                                                         var fullText = ""
                                                                         val initialJarvisMsg = JarvisChatMessage(text = "", isUser = false, isThinking = true)
                                                                         var streamWithJarvis = updatedWithUser + initialJarvisMsg
-                                                                        
+
                                                                         withContext(Dispatchers.IO) {
                                                                             reader.use { br ->
                                                                                 while (true) {
@@ -3575,7 +3575,7 @@ fun JarvisOrb(
                                         )
                                 }
                         }
-                        
+
                         // Indicateur de micro actif
                         if (isListening) {
                             Box(
@@ -3872,7 +3872,7 @@ fun FormattedMessage(text: String, isUser: Boolean, color: Color, imageResult: S
                         null
                     }
                 }
-                
+
                 bitmap?.let {
                     androidx.compose.foundation.Image(
                         bitmap = it.asImageBitmap(),
