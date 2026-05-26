@@ -44,7 +44,7 @@ jobs:
 
     # --- AJOUT : Étape de build pour la version Desktop ---
     - name: Build Desktop App (.deb)
-      run: gradle :desktop:packageDistributionForCurrentOS
+      run: gradle :desktop:packageMsi
       working-directory: ./AxonysAndroidApp
 
     # --- MODIFICATION : Publication combinée des deux applications ---
