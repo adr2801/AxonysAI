@@ -211,8 +211,9 @@ class MainActivity : ComponentActivity() {
                                         "AxonysNotif",
                                         "Nouvelle notification reçue via Intent: $title"
                                 )
+                        }
+                }
         }
-}
 
         override fun onCreate(savedInstanceState: Bundle?) {
                 super.onCreate(savedInstanceState)
