@@ -26,9 +26,21 @@ compose.desktop {
     application {
         mainClass = "com.axonys.ai.desktop.MainKt"
         nativeDistributions {
-            targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Deb, org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi, org.jetbrains.compose.desktop.application.dsl.TargetFormat.Dmg)
+            targetFormats(
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.Deb,
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi
+            )
             packageVersion = "1.0.0"
             packageName = "AxonysAI"
+            
+            // Inclure Java pour que l'application soit autonome
+            // (jpackage bundle automatiquement le JRE)
+            jpackage {
+                imageOptions = listOf(
+                    "--java-options", "-Xmx512M",
+                    "--java-options", "-Dfile.encoding=UTF-8"
+                )
+            }
         }
     }
 }
