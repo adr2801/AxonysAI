@@ -593,15 +593,21 @@ fun JarvisScreen(
                     AnimatedVisibility(visible = selectedImageByteArray != null, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
                         Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).size(100.dp)) {
                             Surface(shape = RoundedCornerShape(12.dp), shadowElevation = 4.dp, border = BorderStroke(2.dp, threadColor.copy(alpha = 0.5f))) {
-                                selectedImageByteArray?.let { bytes ->
-                                    try {
-                                        val img = Image.makeFromEncoded(bytes)
-                                        val bitmap = Bitmap.makeFromImage(img)
-                                        // Convertir en ImageBitmap pour Compose
-                                        val pixels = bitmap.readPixels(bitmap.imageInfo)
-                                        val imageBitmap = org.jetbrains.skiko.toComposeImage(bitmap)
-                                        androidx.compose.foundation.Image(bitmap = imageBitmap, contentDescription = "Aperçu image", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                                    } catch (_: Exception) {}
+                                val previewBitmap = remember(selectedImageByteArray) {
+                                    selectedImageByteArray?.let { bytes ->
+                                        runCatching {
+                                            val img = Image.makeFromEncoded(bytes)
+                                            Bitmap.makeFromImage(img).asImageBitmap()
+                                        }.getOrNull()
+                                    }
+                                }
+                                if (previewBitmap != null) {
+                                    androidx.compose.foundation.Image(
+                                        bitmap = previewBitmap,
+                                        contentDescription = "Aperçu image",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
                                 }
                             }
                             IconButton(onClick = { selectedImageByteArray = null }, modifier = Modifier.align(Alignment.TopEnd).offset(x = 8.dp, y = (-8).dp).size(24.dp).background(Color.Red, CircleShape)) {
@@ -610,7 +616,7 @@ fun JarvisScreen(
                         }
                     }
 
-                    Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
                         var showTools by remember { mutableStateOf(false) }
                         IconButton(onClick = { showTools = !showTools }) {
                             Icon(imageVector = if (showTools) Icons.Default.Close else Icons.Default.Add, contentDescription = "Outils", tint = if (showTools) Color.Gray else threadColor,
@@ -631,7 +637,15 @@ fun JarvisScreen(
                             shape = RoundedCornerShape(28.dp), maxLines = 6
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Box(modifier = Modifier.size(48.dp).clip(CircleShape).background(threadColor).clickable {
+                        Box(modifier = Modifier
+                            .padding(bottom = 4.dp)
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (input.isNotBlank() && !isLoading) threadColor
+                                else threadColor.copy(alpha = 0.4f)
+                            )
+                            .clickable(enabled = input.isNotBlank() && !isLoading) {
                             if (input.isNotBlank() && !isLoading) {
                                 val userMsg = input
                                 val updatedWithUser = currentMessages + JarvisChatMessage(text = userMsg, isUser = true, isError = false)
@@ -719,7 +733,7 @@ fun JarvisScreen(
                         }) {
                             Box(contentAlignment = Alignment.Center) {
                                 if (isLoading) CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
-                                else Text("↑", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                else Icon(imageVector = Icons.Default.Send, contentDescription = "Envoyer", tint = if (input.isNotBlank()) Color.White else Color.White.copy(alpha = 0.5f), modifier = Modifier.size(22.dp))
                             }
                         }
                     }
@@ -954,18 +968,19 @@ fun JarvisOrb(
             }
             // Orbe central - version simplifiée sans android.graphics.Path
             Canvas(modifier = Modifier.size(45.dp).graphicsLayer(rotationZ = rotation * 0.3f)) {
-                val radius = size.width / 2
-                val paint = org.jetbrains.skia.Paint().apply {
-                    shader = org.jetbrains.skia.Shaders.makeRadial(
-                        org.jetbrains.skia.Point(center.x, center.y), radius,
-                        org.jetbrains.skia.Color.makeRGBA(255,255,255,230),
-                        orbColor.toArgb(),
-                        org.jetbrains.skia.Color.makeRGBA((orbColor.red * 255).toInt(), (orbColor.green * 255).toInt(), (orbColor.blue * 255).toInt(), 204),
-                        org.jetbrains.skia.GradientShader.TileMode.CLAMP
+                // Avoid Skia shader APIs that differ across Skiko versions.
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.9f),
+                            orbColor.copy(alpha = 0.9f),
+                            orbColor.copy(alpha = 0.35f),
+                            Color.Transparent
+                        ),
+                        center = center,
+                        radius = size.minDimension / 2
                     )
-                    isAntiAlias = true
-                }
-                drawContext.canvas.nativeCanvas.drawCircle(center.x, center.y, radius, paint)
+                )
             }
             // Particules
             if (isThinking || isToolRunning || isModelLaunching) {

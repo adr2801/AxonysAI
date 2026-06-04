@@ -2194,7 +2194,7 @@ fun JarvisScreen(
                                                                 horizontal = 8.dp,
                                                                 vertical = 6.dp
                                                         ),
-                                                verticalAlignment = Alignment.CenterVertically
+                                                verticalAlignment = Alignment.Bottom
                                         ) {
                                         var showTools by remember { mutableStateOf(false) }
 
@@ -2360,10 +2360,14 @@ fun JarvisScreen(
 
                                         Box(
                                                 modifier = Modifier
+                                                        .padding(bottom = 4.dp)
                                                         .size(48.dp)
                                                         .clip(CircleShape)
-                                                        .background(threadColor)
-                                                        .clickable {
+                                                        .background(
+                                                             if (input.isNotBlank() && !isLoading) threadColor
+                                                             else threadColor.copy(alpha = 0.4f)
+                                                         )
+                                                        .clickable(enabled = input.isNotBlank() && !isLoading) {
                                                             if (input.isNotBlank() && !isLoading) {
                                                                 val userMsg = input
                                                                 val updatedWithUser =
@@ -2533,11 +2537,11 @@ fun JarvisScreen(
                                                                 strokeWidth = 2.dp
                                                             )
                                                         } else {
-                                                            Text(
-                                                                "↑",
-                                                                fontSize = 24.sp,
-                                                                fontWeight = FontWeight.Bold,
-                                                                color = Color.White
+                                                            Icon(
+                                                                imageVector = Icons.Default.Send,
+                                                                contentDescription = "Envoyer",
+                                                                tint = if (input.isNotBlank()) Color.White else Color.White.copy(alpha = 0.5f),
+                                                                modifier = Modifier.size(22.dp)
                                                             )
                                                         }
                                                     }
