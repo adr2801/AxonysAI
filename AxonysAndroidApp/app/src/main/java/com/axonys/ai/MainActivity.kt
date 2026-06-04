@@ -247,6 +247,8 @@ class MainActivity : ComponentActivity() {
                 val iaPrioriseur = MlpPrioriseur()
 
                 val prefs = getSharedPreferences("AxonysPrefs", Context.MODE_PRIVATE)
+                val savedServerUrl = prefs.getString("server_url", "https://addrr-axonys-ai.hf.space/") ?: "https://addrr-axonys-ai.hf.space/"
+                JarvisApiClient.setBaseUrl(savedServerUrl)
                 val savedTheme =
                         prefs.getString("theme_mode", ThemeMode.SYSTEM.name)
                                 ?: ThemeMode.SYSTEM.name
@@ -2529,21 +2531,19 @@ fun JarvisScreen(
                                                             }
                                                         }
                                                 ) {
-                                                    Box(contentAlignment = Alignment.Center) {
-                                                        if (isLoading) {
-                                                            CircularProgressIndicator(
-                                                                modifier = Modifier.size(22.dp),
-                                                                color = Color.White,
-                                                                strokeWidth = 2.dp
-                                                            )
-                                                        } else {
-                                                            Icon(
-                                                                imageVector = Icons.Default.Send,
-                                                                contentDescription = "Envoyer",
-                                                                tint = if (input.isNotBlank()) Color.White else Color.White.copy(alpha = 0.5f),
-                                                                modifier = Modifier.size(22.dp)
-                                                            )
-                                                        }
+                                                    if (isLoading) {
+                                                        CircularProgressIndicator(
+                                                            modifier = Modifier.size(22.dp),
+                                                            color = Color.White,
+                                                            strokeWidth = 2.dp
+                                                        )
+                                                    } else {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Send,
+                                                            contentDescription = "Envoyer",
+                                                            tint = if (input.isNotBlank()) Color.White else Color.White.copy(alpha = 0.5f),
+                                                            modifier = Modifier.size(22.dp)
+                                                        )
                                                     }
                                                 }
 

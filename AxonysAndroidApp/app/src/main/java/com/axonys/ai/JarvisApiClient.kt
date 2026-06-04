@@ -141,7 +141,13 @@ interface JarvisApiService {
 
 // Singleton pour fournir l'API
 object JarvisApiClient {
-    private const val BASE_URL = "https://addrr-axonys-ai.hf.space/"
+    private var dynamicBaseUrl: String = "https://addrr-axonys-ai.hf.space/"
+
+    fun setBaseUrl(newUrl: String) {
+        val cleanUrl = if (newUrl.endsWith("/")) newUrl else "$newUrl/"
+        dynamicBaseUrl = cleanUrl
+        _apiService = createService(cleanUrl)
+    }
 
     private val okHttpClient = okhttp3.OkHttpClient.Builder()
         .connectTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
@@ -172,14 +178,23 @@ object JarvisApiClient {
         }
         .build()
 
-    val apiService: JarvisApiService by lazy {
-        Retrofit.Builder()
-            .baseUrl(BASE_URL)
+    private fun createService(url: String): JarvisApiService {
+        return Retrofit.Builder()
+            .baseUrl(url)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(JarvisApiService::class.java)
     }
+
+    private var _apiService: JarvisApiService? = null
+    val apiService: JarvisApiService
+        get() {
+            if (_apiService == null) {
+                _apiService = createService(dynamicBaseUrl)
+            }
+            return _apiService!!
+        }
 
     val githubService: GithubApiService by lazy {
         Retrofit.Builder()
