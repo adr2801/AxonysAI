@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
+import androidx.compose.material.AlertDialog
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -1065,7 +1066,7 @@ fun FormattedMessage(text: String, isUser: Boolean, color: Color, imageResult: S
                     val bytes = Base64.getDecoder().decode(base64)
                     val img = Image.makeFromEncoded(bytes)
                     val bitmap = Bitmap.makeFromImage(img)
-                    val imageBitmap = org.jetbrains.skiko.toComposeImage(bitmap)
+                    val imageBitmap = bitmap.asImageBitmap()
                     androidx.compose.foundation.Image(bitmap = imageBitmap, contentDescription = "Graphique généré", modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp), contentScale = ContentScale.Fit)
                 } catch (_: Exception) {}
             }
