@@ -44,33 +44,7 @@ jobs:
         path: |
           AxonysAndroidApp/app/build/outputs/apk/debug/*.apk
 
-  # ─── JOB 2 : Desktop MSI (sur Windows) ───
-  build-windows:
-    runs-on: windows-latest
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: gradle
-
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v4
-      with:
-        gradle-version: '8.7'
-
-    - name: Build Desktop .msi (Windows Installer)
-      run: gradle :desktop:packageMsi
-      working-directory: ./AxonysAndroidApp
-
-    # Upload .msi pour le job release
-    - uses: actions/upload-artifact@v4
-      with:
-        name: build-windows-artifacts
-        path: AxonysAndroidApp/desktop/build/compose/binaries/main/msi/*.msi
+  x
 
   # ─── JOB 3 : Release (combine tout et publie) ───
   release:
