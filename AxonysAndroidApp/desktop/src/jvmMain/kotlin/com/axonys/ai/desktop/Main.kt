@@ -108,7 +108,7 @@ class DesktopPreferences {
 }
 
 // --- Desktop App Principal ---
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.material.ExperimentalMaterialApi::class)
 @Composable
 fun DesktopApp() {
     val prefs = remember { DesktopPreferences() }
@@ -504,7 +504,7 @@ fun JarvisScreen(
     if (showNewThreadDialog) {
         AlertDialog(
             onDismissRequest = { showNewThreadDialog = false }, shape = RoundedCornerShape(28.dp),
-            containerColor = MaterialTheme.colorScheme.surface,
+            backgroundColor = MaterialTheme.colorScheme.surface,
             title = { Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                 Text("🚀 Nouveau Canal", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp); Spacer(modifier = Modifier.height(4.dp))
                 Text("Créez un espace de discussion dédié", fontSize = 12.sp, color = Color.Gray)
@@ -1017,6 +1017,7 @@ fun JarvisModeSelector(selectedMode: String?, onModeSelected: (String?) -> Unit,
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
+@OptIn(androidx.compose.material.ExperimentalMaterialApi::class)
 @Composable
 fun CreateModeDialog(onDismiss: () -> Unit, onCreate: (String, String, String, String) -> Unit) {
     var name by remember { mutableStateOf("") }
@@ -1062,13 +1063,19 @@ fun FormattedMessage(text: String, isUser: Boolean, color: Color, imageResult: S
         }
         imageResult?.let { base64 ->
             Box(modifier = Modifier.padding(16.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White)) {
-                try {
-                    val bytes = Base64.getDecoder().decode(base64)
-                    val img = Image.makeFromEncoded(bytes)
-                    val bitmap = Bitmap.makeFromImage(img)
-                    val imageBitmap = bitmap.asImageBitmap()
+                val imageBitmap = remember(base64) {
+                    try {
+                        val bytes = Base64.getDecoder().decode(base64)
+                        val img = Image.makeFromEncoded(bytes)
+                        val bitmap = Bitmap.makeFromImage(img)
+                        bitmap.asImageBitmap()
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+                if (imageBitmap != null) {
                     androidx.compose.foundation.Image(bitmap = imageBitmap, contentDescription = "Graphique généré", modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp), contentScale = ContentScale.Fit)
-                } catch (_: Exception) {}
+                }
             }
         }
     }
