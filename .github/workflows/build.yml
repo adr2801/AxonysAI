@@ -37,17 +37,12 @@ jobs:
       run: gradle assembleDebug
       working-directory: ./AxonysAndroidApp
 
-    - name: Build Desktop .deb (Linux)
-      run: gradle :desktop:packageDeb
-      working-directory: ./AxonysAndroidApp
-
-    # Upload APK et .deb pour le job release
+    # Upload APK pour le job release
     - uses: actions/upload-artifact@v4
       with:
         name: build-linux-artifacts
         path: |
           AxonysAndroidApp/app/build/outputs/apk/debug/*.apk
-          AxonysAndroidApp/desktop/build/compose/binaries/main/deb/*.deb
 
   # ─── JOB 2 : Desktop MSI (sur Windows) ───
   build-windows:
