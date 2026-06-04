@@ -247,7 +247,7 @@ class MainActivity : ComponentActivity() {
                 val iaPrioriseur = MlpPrioriseur()
 
                 val prefs = getSharedPreferences("AxonysPrefs", Context.MODE_PRIVATE)
-                val savedServerUrl = prefs.getString("server_url", "https://addrr-axonys-ai.hf.space/") ?: "https://addrr-axonys-ai.hf.space/"
+                val savedServerUrl = prefs.getString("server_url", "https://addrr-cortex-ai.hf.space/") ?: "https://addrr-cortex-ai.hf.space/"
                 JarvisApiClient.setBaseUrl(savedServerUrl)
                 val savedTheme =
                         prefs.getString("theme_mode", ThemeMode.SYSTEM.name)

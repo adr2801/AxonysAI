@@ -115,7 +115,7 @@ interface JarvisApiService {
 }
 
 object JarvisApiClient {
-    private var dynamicBaseUrl: String = "https://addrr-axonys-ai.hf.space/"
+    private var dynamicBaseUrl: String = "https://addrr-cortex-ai.hf.space/"
 
     fun setBaseUrl(newUrl: String) {
         val cleanUrl = if (newUrl.endsWith("/")) newUrl else "$newUrl/"
