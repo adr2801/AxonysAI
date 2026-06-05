@@ -2360,7 +2360,7 @@ fun JarvisScreen(
 
                                         Spacer(modifier = Modifier.width(8.dp))
 
-                                        Box(
+                                        Surface(
                                                 modifier = Modifier
                                                         .size(48.dp)
                                                         .clip(CircleShape)
@@ -2573,7 +2573,7 @@ fun JarvisScreen(
                         Box(modifier = Modifier.width(260.dp).fillMaxHeight()) {
                                 // Fond glassmorphism (blur uniquement sur ce layer)
                                 if (android.os.Build.VERSION.SDK_INT >= 31) {
-                                        Box(
+                                        Surface(
                                                 modifier =
                                                         Modifier.fillMaxSize()
                                                                 .blur(20.dp)
