@@ -2590,13 +2590,9 @@ fun JarvisScreen(
                                         modifier = Modifier.fillMaxSize(),
                                         color =
                                                 MaterialTheme.colorScheme.surface.copy(
-                                                        alpha =
-                                                                if (android.os.Build.VERSION
-                                                                                .SDK_INT >= 31
-                                                                )
-                                                                        0.1f
-                                                                else 0.97f
+                                                        if (android.os.Build.VERSION.SDK_INT >= 31) 0.85f else 0.97f
                                                 ),
+
                                         shadowElevation = 0.dp,
                                         tonalElevation = 0.dp
                                 ) {
