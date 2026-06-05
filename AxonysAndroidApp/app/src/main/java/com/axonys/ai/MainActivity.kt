@@ -2362,7 +2362,6 @@ fun JarvisScreen(
 
                                         Box(
                                                 modifier = Modifier
-                                                        .padding(bottom = 4.dp)
                                                         .size(48.dp)
                                                         .clip(CircleShape)
                                                         .background(
