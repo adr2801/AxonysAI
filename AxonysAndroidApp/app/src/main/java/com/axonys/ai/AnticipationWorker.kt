@@ -17,13 +17,13 @@ class AnticipationWorker(context: Context, params: WorkerParameters) : Coroutine
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            val prefs = applicationContext.getSharedPreferences("AxonysPrefs", Context.MODE_PRIVATE)
+            val prefs = PrefsManager.getEncryptedPrefs(applicationContext)
             val token = prefs.getString("google_id_token", null)
             val userId = prefs.getString("user_id", null) ?: android.provider.Settings.Secure.getString(
                 applicationContext.contentResolver,
                 android.provider.Settings.Secure.ANDROID_ID
             ) ?: "default_device"
-            val name = prefs.getString("user_name", "Antoine")
+            val name = prefs.getString("user_name", "Utilisateur")
             
             Log.d("JarvisAnticipate", "Déclenchement de la réflexion proactive...")
             

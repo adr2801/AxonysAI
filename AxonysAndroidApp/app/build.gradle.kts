@@ -84,4 +84,7 @@ dependencies {
     
     // Google Location
     implementation("com.google.android.gms:play-services-location:21.0.1")
+    
+    // Security for EncryptedSharedPreferences
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 }

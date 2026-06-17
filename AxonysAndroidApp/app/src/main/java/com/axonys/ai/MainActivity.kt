@@ -99,6 +99,7 @@ class MainActivity : ComponentActivity() {
 
         private lateinit var fusedLocationClient: FusedLocationProviderClient
         private var updateLocation: ((Double, Double) -> Unit)? = null
+        private var locationCallback: com.google.android.gms.location.LocationCallback? = null
 
         private val requestPermissionLauncher =
                 registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -127,7 +128,7 @@ class MainActivity : ComponentActivity() {
                                         .setMinUpdateIntervalMillis(10000L)
                                         .build()
 
-                        val locationCallback =
+                        val callback =
                                 object : com.google.android.gms.location.LocationCallback() {
                                         override fun onLocationResult(
                                                 result:
@@ -144,9 +145,10 @@ class MainActivity : ComponentActivity() {
                                                 )
                                         }
                                 }
+                        locationCallback = callback
                         fusedLocationClient.requestLocationUpdates(
                                 locationRequest,
-                                locationCallback,
+                                callback,
                                 android.os.Looper.getMainLooper()
                         )
                         // Aussi récupérer la dernière position connue immédiatement
@@ -199,6 +201,13 @@ class MainActivity : ComponentActivity() {
                 }
         private var onImageSelected: ((Uri) -> Unit)? = null
 
+        override fun onDestroy() {
+                super.onDestroy()
+                locationCallback?.let { callback ->
+                        fusedLocationClient.removeLocationUpdates(callback)
+                }
+        }
+
         override fun onNewIntent(intent: Intent?) {
                 super.onNewIntent(intent)
                 setIntent(intent)
@@ -246,7 +255,10 @@ class MainActivity : ComponentActivity() {
 
                 val iaPrioriseur = MlpPrioriseur()
 
-                val prefs = getSharedPreferences("AxonysPrefs", Context.MODE_PRIVATE)
+                // Migrer les préférences si nécessaire
+                PrefsManager.migrateIfNeeded(this)
+                val prefs = PrefsManager.getEncryptedPrefs(this)
+                
                 val savedServerUrl = prefs.getString("server_url", "https://addrr-cortex-ai.hf.space/") ?: "https://addrr-cortex-ai.hf.space/"
                 JarvisApiClient.setBaseUrl(savedServerUrl)
                 val savedTheme =
@@ -254,11 +266,11 @@ class MainActivity : ComponentActivity() {
                                 ?: ThemeMode.SYSTEM.name
                 val briefingEnabled = prefs.getBoolean("briefing_enabled", false)
 
-                val initialUserId = lastAccount?.displayName?.lowercase()?.replace(" ", "_") ?: "antoine"
+                val initialUserId = lastAccount?.displayName?.lowercase()?.replace(" ", "_") ?: prefs.getString("user_id", "user_default") ?: "user_default"
                 val chatHistory =
                         prefs.getString("chat_history_${initialUserId}", null)
                 val defaultGreeting =
-                        "Bonjour ${lastAccount?.displayName?.split(" ")?.firstOrNull() ?: "Antoine"}. Les systèmes sont en ligne."
+                        "Bonjour ${lastAccount?.displayName?.split(" ")?.firstOrNull() ?: prefs.getString("user_name", "Utilisateur")}. Les systèmes sont en ligne."
                 val initialMessages =
                         if (chatHistory != null) {
                                 try {
@@ -299,7 +311,7 @@ class MainActivity : ComponentActivity() {
                         var googleAccount by remember { mutableStateOf(lastAccount) }
                         val currentUserId =
                                 remember(googleAccount) {
-                                        googleAccount?.id ?: android.provider.Settings.Secure.getString(
+                                        googleAccount?.id ?: prefs.getString("user_id", null) ?: android.provider.Settings.Secure.getString(
                                                 context.contentResolver,
                                                 android.provider.Settings.Secure.ANDROID_ID
                                         ) ?: "default_device"
@@ -307,7 +319,7 @@ class MainActivity : ComponentActivity() {
                         val currentUserName =
                                 remember(googleAccount) {
                                         googleAccount?.displayName?.split(" ")?.firstOrNull()
-                                                ?: "Antoine"
+                                                ?: prefs.getString("user_name", "Utilisateur")
                                 }
                         var activeNotification by remember {
                                 mutableStateOf<JarvisNotification?>(null)
@@ -477,7 +489,7 @@ class MainActivity : ComponentActivity() {
                                                 prioritizedTasks = prioritizedTasks,
                                                 googleAccount = googleAccount,
                                                 currentUserId = currentUserId,
-                                                currentUserName = currentUserId,
+                                                currentUserName = currentUserName,
                                                 lat = currentLatitude,
                                                 lng = currentLongitude,
                                                 onThemeChange = {
@@ -664,7 +676,7 @@ class MainActivity : ComponentActivity() {
         private fun handleSignInResult(account: GoogleSignInAccount?) {
                 if (account != null) {
                         val scope =
-                                "oauth2:https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/calendar"
+                                "oauth2:https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file"
 
                         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                 try {
@@ -675,16 +687,12 @@ class MainActivity : ComponentActivity() {
                                                         scope
                                                 )
 
-                                        val prefs =
-                                                getSharedPreferences(
-                                                        "AxonysPrefs",
-                                                        Context.MODE_PRIVATE
-                                                )
+                                        val prefs = PrefsManager.getEncryptedPrefs(this@MainActivity)
                                         prefs.edit().putString("google_id_token", token).apply()
                                         prefs.edit()
                                                 .putString(
                                                         "user_name",
-                                                        account.displayName ?: "Antoine"
+                                                        account.displayName ?: "Utilisateur"
                                                 )
                                                 .apply()
 
@@ -715,7 +723,7 @@ class MainActivity : ComponentActivity() {
                 val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).build()
                 val client = GoogleSignIn.getClient(this, gso)
                 client.signOut().addOnCompleteListener {
-                        val prefs = getSharedPreferences("AxonysPrefs", Context.MODE_PRIVATE)
+                        val prefs = PrefsManager.getEncryptedPrefs(this)
                         prefs.edit().remove("google_id_token").apply()
                         recreate()
                 }
@@ -814,8 +822,7 @@ class MainActivity : ComponentActivity() {
                                 val scope =
                                         "oauth2:https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file"
                                 // Clear current token to force refresh if needed
-                                val prefs =
-                                        getSharedPreferences("AxonysPrefs", Context.MODE_PRIVATE)
+                                val prefs = PrefsManager.getEncryptedPrefs(this@MainActivity)
                                 val currentToken = prefs.getString("google_id_token", null)
                                 if (currentToken != null) {
                                         com.google.android.gms.auth.GoogleAuthUtil.clearToken(
@@ -878,38 +885,7 @@ fun MainScreen(
         var activeNotification by remember { mutableStateOf<JarvisNotification?>(null) }
         val context = androidx.compose.ui.platform.LocalContext.current
 
-        // Polling pour les notifications proactives
-        LaunchedEffect(googleAccount) {
-                if (googleAccount != null) {
-                        while (true) {
-                                try {
-                                        val response =
-                                                JarvisApiClient.apiService.getNotifications(
-                                                        currentUserId
-                                                )
-                                        if (response.notifications.isNotEmpty()) {
-                                                response.notifications.forEach { notif ->
-                                                        showNativeNotification(
-                                                                context,
-                                                                notif.title,
-                                                                notif.message
-                                                        )
-                                                        // On pourrait aussi les afficher dans la
-                                                        // liste de chat si besoin
-                                                }
-                                                // Une fois reçues, on demande au serveur de les
-                                                // effacer
-                                                JarvisApiClient.apiService.clearNotifications(
-                                                        currentUserId
-                                                )
-                                        }
-                                } catch (e: Exception) {
-                                        Log.e("AxonysNotif", "Erreur polling: ${e.message}")
-                                }
-                                kotlinx.coroutines.delay(30000) // Toutes les 30 secondes
-                        }
-                }
-        }
+        // Polling pour les notifications proactives désactivé ici car géré dans onCreate de MainActivity
 
         var updateUrl by remember { mutableStateOf<String?>(null) }
 
@@ -2360,8 +2336,9 @@ fun JarvisScreen(
 
                                         Spacer(modifier = Modifier.width(8.dp))
 
-                                        Surface(
+                                        Box(
                                                 modifier = Modifier
+                                                        .padding(bottom = 4.dp)
                                                         .size(48.dp)
                                                         .clip(CircleShape)
                                                         .background(
@@ -2409,7 +2386,7 @@ fun JarvisScreen(
                                                                     }
 
                                                                     try {
-                                                                        val prefs = context.getSharedPreferences("AxonysPrefs", Context.MODE_PRIVATE)
+                                                                        val prefs = PrefsManager.getEncryptedPrefs(context)
                                                                         var token = prefs.getString("google_id_token", null)
                                                                         val responseBody = withContext(Dispatchers.IO) {
                                                                             val freshToken = onRefreshToken()
@@ -2529,6 +2506,8 @@ fun JarvisScreen(
                                                                 }
                                                             }
                                                         }
+                                                ,
+                                                contentAlignment = Alignment.Center
                                                 ) {
                                                     if (isLoading) {
                                                         CircularProgressIndicator(
@@ -2545,6 +2524,10 @@ fun JarvisScreen(
                                                         )
                                                     }
                                                 }
+                                        } // close Row (contrôles de saisie)
+                                } // close Column (contenu barre de saisie)
+                        } // close Surface (barre de saisie flottante)
+                } // close Column (chat principal)
 
                 // --- VOILE DE FOND (Scrim) ---
                 androidx.compose.animation.AnimatedVisibility(
@@ -2573,7 +2556,7 @@ fun JarvisScreen(
                         Box(modifier = Modifier.width(260.dp).fillMaxHeight()) {
                                 // Fond glassmorphism (blur uniquement sur ce layer)
                                 if (android.os.Build.VERSION.SDK_INT >= 31) {
-                                        Surface(
+                                        Box(
                                                 modifier =
                                                         Modifier.fillMaxSize()
                                                                 .blur(20.dp)
@@ -2589,42 +2572,40 @@ fun JarvisScreen(
                                         modifier = Modifier.fillMaxSize(),
                                         color =
                                                 MaterialTheme.colorScheme.surface.copy(
-                                                        if (android.os.Build.VERSION.SDK_INT >= 31) 0.85f else 0.97f
+                                                        alpha =
+                                                                if (android.os.Build.VERSION
+                                                                                .SDK_INT >= 31
+                                                                )
+                                                                        0.1f
+                                                                else 0.97f
                                                 ),
-
                                         shadowElevation = 0.dp,
                                         tonalElevation = 0.dp
                                 ) {
-                                        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                                        Column(
+                                                modifier =
+                                                        Modifier.fillMaxSize()
+                                                                .padding(16.dp)
+                                        ) {
                                                 Text(
-                                                        "🤖 Discussions",
-                                                        fontSize = 16.sp,
+                                                        "💬 Canaux",
+                                                        fontSize = 20.sp,
                                                         fontWeight = FontWeight.Bold,
-                                                        color = MaterialTheme.colorScheme.primary,
-                                                        modifier = Modifier.padding(bottom = 12.dp)
+                                                        color = threadColor,
+                                                        modifier =
+                                                                Modifier.padding(
+                                                                        bottom = 16.dp
+                                                                )
                                                 )
 
-                                                threads.forEach { threadId ->
-                                                        val isSelected = threadId == currentThreadId
+                                                availableThreads.forEach { threadId ->
+                                                        val isSelected =
+                                                                threadId == currentThreadId
                                                         val icon =
-                                                                when {
-                                                                        threadId == "main" -> "🏠"
-                                                                        threadId.contains(
-                                                                                "briefing"
-                                                                        ) -> "⚡"
-                                                                        threadId.contains("dev") ->
-                                                                                "🛠️"
-                                                                        threadId.contains("nsi") ->
-                                                                                "💻"
-                                                                        threadId.contains(
-                                                                                "projet"
-                                                                        ) -> "🚀"
-                                                                        else -> "📌"
-                                                                }
+                                                                if (threadId == "main") "🤖"
+                                                                else "💬"
                                                         val displayName =
-                                                                if (threadId == "main") "Général"
-                                                                else
-                                                                        threadId.replace("_", " ")
+                                                                threadId.replace("_", " ")
                                                                                 .replaceFirstChar {
                                                                                         it.uppercase()
                                                                                 }
@@ -2704,10 +2685,6 @@ fun JarvisScreen(
                                 }
                         } // close Surface
                 } // close Box glassmorphism
-                                        } // close Row (contrôles de saisie)
-                                } // close Column (contenu barre de saisie)
-                        } // close Surface (barre de saisie flottante)
-                } // close Column (chat principal)
         } // close Box (conteneur JarvisScreen)
 } // close JarvisScreen
 

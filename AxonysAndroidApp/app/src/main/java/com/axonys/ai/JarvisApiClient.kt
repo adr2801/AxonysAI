@@ -15,7 +15,7 @@ data class ChatRequest(
     val prompt: String, 
     val google_token: String? = null, 
     val user_id: String,
-    val user_name: String? = "Antoine",
+    val user_name: String? = null,
     val lat: Double? = null,
     val lng: Double? = null,
     val thread_id: String? = "main",
@@ -29,7 +29,7 @@ data class HistoryItem(val text: String, val isUser: Boolean)
 data class HistoryResponse(val history: List<HistoryItem>)
 data class MemoryFact(val fact: String, val timestamp: String)
 data class MemoryResponse(val facts: List<MemoryFact>)
-data class DeleteMemoryRequest(val fact: String, val user_id: String = "antoine")
+data class DeleteMemoryRequest(val fact: String, val user_id: String)
 data class PreferencesResponse(val preferences: Map<String, String>)
 data class SetPreferenceRequest(val preference_key: String, val preference_value: String)
 data class JarvisMode(val id: Int, val name: String, val instruction: String, val icon: String?, val color: String?)

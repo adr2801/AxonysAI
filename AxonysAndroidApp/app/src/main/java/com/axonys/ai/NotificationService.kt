@@ -3,11 +3,12 @@ package com.axonys.ai
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import java.util.concurrent.CopyOnWriteArrayList
 
 class NotificationService : NotificationListenerService() {
 
     companion object {
-        private val notificationLogs = mutableListOf<String>()
+        private val notificationLogs = CopyOnWriteArrayList<String>()
 
         fun getRecentNotifications(): String {
             return if (notificationLogs.isEmpty()) "Aucune notification récente."
