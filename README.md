@@ -160,3 +160,6 @@ Le gestionnaire de mémoire (`MemoryManager`) initialise automatiquement les tab
 
 ## 📜 Licence & Contribution
 Projet développé dans le cadre d'Axonys AI. Toute contribution ou retour d'expérience est le bienvenu via les Issues et Pull Requests sur le dépôt GitHub.
+
+## Contact :
+- adresse e-mail : axonysai@free.fr
