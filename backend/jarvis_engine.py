@@ -41,7 +41,8 @@ context = UserContext()
 
 class JarvisEngine:
     def __init__(self, model_name: Optional[str] = None):
-        self.use_local_model = os.getenv("USE_LOCAL_MODEL", "false").lower() in ("true", "1", "yes") or not API_KEY
+        # Priorité serveur : modèle Hugging Face local, puis fallback API.
+        self.use_local_model = os.getenv("USE_LOCAL_MODEL", "true").lower() in ("true", "1", "yes") or not API_KEY
         self.local_model_id = os.getenv("LOCAL_MODEL_ID", "Qwen/Qwen2.5-14B-Instruct")
         self.model_id = model_name or os.getenv("GEMINI_MODEL", "gemma-4-31b-it")
         self.fallback_model_id = os.getenv("FALLBACK_MODEL", "gemma-4-26b-a4b-it")
@@ -470,6 +471,9 @@ Réponds TOUJOURS en français, de façon concise et élégante.
             if chunk.text:
                 full_text += chunk.text
                 yield chunk.text
+
+        if not full_text:
+            raise RuntimeError("Le modèle serveur n'a produit aucune réponse.")
 
         if save_to_history and full_text:
             model_parts = [types.Part(text=full_text)]

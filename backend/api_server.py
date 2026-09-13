@@ -95,7 +95,7 @@ async def chat_stream(request: ChatRequest):
             # Envoi final avec métadonnées (image_result, sentiment)
             yield f"data: {json.dumps({'done': True, 'image_result': jarvis.last_image_result, 'sentiment': jarvis.last_sentiment})}\n\n"
         except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
