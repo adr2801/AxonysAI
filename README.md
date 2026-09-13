@@ -25,7 +25,7 @@ AxonysAI/
 │   ├── mcp_server.py              # Serveur MCP (Google Workspace, Serper Search, Python Sandbox, etc.)
 │   └── requirements.txt           # Dépendances Python
 │
-├── AxonysAndroidApp/              # Application mobile Android native
+├── AxonysAndroidApp/              # Application mobile Android native (non-disponible en open-source si le projet vous intéresse contactez-moi)
 │   ├── app/src/main/java/com/axonys/ai/
 │   │   ├── MainActivity.kt        # Point d'entrée, cycle de vie et autorisations
 │   │   ├── MainViewModel.kt       # Gestion de l'état UI, flux SSE, audio et modes
