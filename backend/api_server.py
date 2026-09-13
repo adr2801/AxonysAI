@@ -26,7 +26,7 @@ jarvis = JarvisEngine()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://axonysai.free.fr", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -130,8 +130,6 @@ async def chat(request: ChatRequest):
         print(f"!!! ERREUR CRITIQUE API JARVIS (/chat) !!!\n{error_trace}")
         raise HTTPException(status_code=500, detail=str(e))
 
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.post("/chat/{user_id}/delete")
 async def delete_chat_message(user_id: str, request: Request):
     try:
@@ -201,12 +199,9 @@ async def clear_notifications(user_id: str):
 
 @app.get("/history/{thread_id}")
 async def get_thread_history(thread_id: str, user_id: str):
-
     """Récupère l'historique complet d'un thread spécifique pour un utilisateur donné."""
     try:
-        from jarvis_engine import memory_manager
-        safe_user_id = user_id.lower().replace(" ", "_")
-        
+        safe_user_id = memory_manager.normalize_user_id(user_id)
         with memory_manager.get_conn() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -227,7 +222,7 @@ async def get_thread_history(thread_id: str, user_id: str):
             except Exception:
                 pass
             
-            # Nettoyage de tout le contexte injecté au début du message (incluant émotion et lieu)
+            # Nettoyage de tout le contexte injecté au début du message
             text = re.sub(r'^\[CONTEXTE :.*?\n\n', '', text, flags=re.DOTALL)
             if "Génère un briefing matinal" in text or "Analyse mes notifications" in text:
                 continue
@@ -243,13 +238,12 @@ async def get_thread_history(thread_id: str, user_id: str):
 
 @app.get("/threads")
 async def list_threads(user_id: str):
-
-    """Liste tous les threads de discussion disponibles depuis Supabase."""
+    """Liste tous les threads de discussion disponibles depuis Supabase pour l'utilisateur."""
     try:
-        from jarvis_engine import memory_manager
+        safe_user_id = memory_manager.normalize_user_id(user_id)
         with memory_manager.get_conn() as conn:
             with conn.cursor() as cursor:
-                cursor.execute("SELECT DISTINCT thread_id FROM conversation_history")
+                cursor.execute("SELECT DISTINCT thread_id FROM conversation_history WHERE user_id = %s", (safe_user_id,))
                 rows = cursor.fetchall()
                 
         threads = {row[0] for row in rows}
@@ -259,35 +253,9 @@ async def list_threads(user_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/bridge")
-async def get_bridge_notes():
-    """Récupère les notes laissées par Jarvis pour le développeur."""
-    try:
-        from jarvis_engine import memory_manager
-        with memory_manager.get_conn() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT id, title, message, category, timestamp FROM bridge_notes ORDER BY timestamp DESC")
-                rows = cursor.fetchall()
-        
-        notes = []
-        for r in rows:
-            notes.append({
-                "id": r[0],
-                "title": r[1],
-                "message": r[2],
-                "category": r[3],
-                "timestamp": str(r[4])
-            })
-        return {"notes": notes, "count": len(notes)}
-    except Exception as e:
-        import traceback
-        print(f"Erreur API /bridge : {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.get("/preferences/{user_id}")
 async def get_preferences(user_id: str):
     try:
-        from jarvis_engine import memory_manager
         prefs = memory_manager.get_user_preferences(user_id)
         return {"preferences": prefs}
     except Exception as e:
@@ -300,29 +268,14 @@ class PreferenceRequest(BaseModel):
 @app.post("/preferences/{user_id}")
 async def set_preference(user_id: str, request: PreferenceRequest):
     try:
-        from jarvis_engine import memory_manager
         memory_manager.set_user_preference(user_id, request.preference_key, request.preference_value)
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/bridge/clear")
-async def clear_bridge_notes():
-    """Marque toutes les notes comme lues et vide la table bridge."""
-    try:
-        from jarvis_engine import memory_manager
-        with memory_manager.get_conn() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("DELETE FROM bridge_notes")
-            conn.commit()
-        return {"status": "cleared"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.get("/memory/{user_id}")
 async def get_memory(user_id: str):
-
     try:
         facts = memory_manager.get_all_facts(user_id)
         return {"facts": facts}
@@ -375,12 +328,12 @@ async def delete_mode(user_id: str, request: Request):
 @app.get("/tasks/{user_id}")
 async def get_tasks(user_id: str):
     try:
-        from jarvis_engine import memory_manager
+        uid = memory_manager.normalize_user_id(user_id)
         with memory_manager.get_conn() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     "SELECT name, score, urgency, importance, duration, envy, energy, status, id FROM user_tasks WHERE user_id = %s ORDER BY score DESC",
-                    (user_id.lower(),)
+                    (uid,)
                 )
                 rows = cursor.fetchall()
         
@@ -388,7 +341,7 @@ async def get_tasks(user_id: str):
         for r in rows:
             tasks.append({
                 "name": r[0],
-                "score": r[1] * 100, # Conversion en % pour l'app
+                "score": (r[1] or 0.0) * 100, # Conversion en % pour l'app
                 "urgency": r[2],
                 "importance": r[3],
                 "duration": r[4],
@@ -404,14 +357,12 @@ async def get_tasks(user_id: str):
 @app.post("/tasks/{user_id}")
 async def add_task(user_id: str, request: TaskRequest):
     try:
-        from jarvis_engine import memory_manager
-        # Si le score n'est pas fourni, on pourrait appeler le MLP prioritizer ici (à faire plus tard)
-        # Pour l'instant on stocke ce qui vient de l'app ou de Jarvis
+        uid = memory_manager.normalize_user_id(user_id)
         with memory_manager.get_conn() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     "INSERT INTO user_tasks (user_id, name, score, urgency, importance, duration, envy, energy, status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                    (user_id.lower(), request.name, request.score / 100.0, request.urgency, request.importance, request.duration, request.envy, request.energy, request.status)
+                    (uid, request.name, (request.score or 0.0) / 100.0, request.urgency, request.importance, request.duration, request.envy, request.energy, request.status)
                 )
             conn.commit()
         return {"status": "success"}
@@ -421,16 +372,16 @@ async def add_task(user_id: str, request: TaskRequest):
 @app.post("/tasks/{user_id}/delete")
 async def delete_task(user_id: str, request: Request):
     try:
+        uid = memory_manager.normalize_user_id(user_id)
         data = await request.json()
         task_id = data.get("id")
         task_name = data.get("name")
-        from jarvis_engine import memory_manager
         with memory_manager.get_conn() as conn:
             with conn.cursor() as cursor:
                 if task_id:
-                    cursor.execute("DELETE FROM user_tasks WHERE user_id = %s AND id = %s", (user_id.lower(), task_id))
+                    cursor.execute("DELETE FROM user_tasks WHERE user_id = %s AND id = %s", (uid, task_id))
                 else:
-                    cursor.execute("DELETE FROM user_tasks WHERE user_id = %s AND name = %s", (user_id.lower(), task_name))
+                    cursor.execute("DELETE FROM user_tasks WHERE user_id = %s AND name = %s", (uid, task_name))
             conn.commit()
         return {"status": "deleted"}
     except Exception as e:
@@ -439,5 +390,4 @@ async def delete_task(user_id: str, request: Request):
 
 if __name__ == "__main__":
     import uvicorn
-    # On augmente le timeout à 120 secondes pour laisser le temps aux agents de réfléchir
     uvicorn.run(app, host="0.0.0.0", port=7860, timeout_keep_alive=120)

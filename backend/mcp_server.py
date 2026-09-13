@@ -2,7 +2,7 @@ import os
 import json
 import httpx
 import base64
-from datetime import datetime
+from datetime import datetime, timezone
 from mcp.server.fastmcp import FastMCP
 from dotenv import load_dotenv
 from pathlib import Path
@@ -116,37 +116,32 @@ async def read_project_file(relative_path: str) -> str:
     except Exception as e:
         return f"Erreur de lecture : {str(e)}"
 
+from memory_manager import MemoryManager
+mm = MemoryManager()
+
 # --- OUTILS DE MÉMOIRE ---
 
 @mcp.tool()
 async def memory_remember(user_id: str, fact: str) -> str:
     """Enregistre un fait important dans la mémoire persistante de Jarvis."""
-    from memory_manager import MemoryManager
-    mm = MemoryManager(db_path=DB_PATH)
     mm.save_fact(user_id, fact)
     return f"Je me souviendrai de : '{fact}'"
 
 @mcp.tool()
 async def memory_recall(user_id: str, query: str) -> str:
     """Récupère les souvenirs les plus pertinents."""
-    from memory_manager import MemoryManager
-    mm = MemoryManager(db_path=DB_PATH)
     facts = mm.get_relevant_facts(user_id, current_query=query, top_k=5)
     return "\n".join([f"- {f}" for f in facts]) if facts else "Aucun souvenir trouvé."
 
 @mcp.tool()
 async def memory_set_preference(user_id: str, preference_key: str, preference_value: str) -> str:
     """Enregistre ou met à jour une préférence explicite de l'utilisateur (ex: 'boisson_favorite', 'café noir')."""
-    from memory_manager import MemoryManager
-    mm = MemoryManager()
     mm.set_user_preference(user_id, preference_key, preference_value)
     return f"Préférence enregistrée : {preference_key} = {preference_value}"
 
 @mcp.tool()
 async def memory_get_preferences(user_id: str) -> str:
     """Récupère toutes les préférences explicites connues de l'utilisateur."""
-    from memory_manager import MemoryManager
-    mm = MemoryManager()
     prefs = mm.get_user_preferences(user_id)
     return "\n".join([f"- {k}: {v}" for k, v in prefs.items()]) if prefs else "Aucune préférence enregistrée."
 
@@ -154,8 +149,6 @@ async def memory_get_preferences(user_id: str) -> str:
 async def schedule_smart_reminder(user_id: str, title: str, message: str, scheduled_time: str) -> str:
     """Planifie une notification push proactive pour l'utilisateur. 
     scheduled_time doit être au format ISO (ex: '2026-05-08T15:30:00')."""
-    from memory_manager import MemoryManager
-    mm = MemoryManager()
     mm.schedule_notification(user_id, title, message, scheduled_time)
     return f"Rappel planifié pour {scheduled_time} : {title}"
 
@@ -166,11 +159,8 @@ async def search_memory(query: str, top_k: int = 10) -> str:
     Effectue une recherche sémantique approfondie dans les souvenirs de l'utilisateur.
     Utilise la recherche vectorielle pour trouver les faits les plus pertinents.
     """
-    from memory_manager import MemoryManager
     from jarvis_engine import context
-    
     user_id = context.user_id or "default"
-    mm = MemoryManager()
     facts = mm.get_relevant_facts(user_id, current_query=query, top_k=top_k)
     
     if not facts:
@@ -228,7 +218,7 @@ async def gmail_delete(google_token: str, message_id: str) -> str:
 async def calendar_events(google_token: str) -> str:
     """Récupère les prochains événements."""
     headers = {"Authorization": f"Bearer {google_token}"}
-    now = datetime.utcnow().isoformat() + 'Z'
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     url = f"https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin={now}&maxResults=5&singleEvents=true&orderBy=startTime"
     async with httpx.AsyncClient() as client:
         res = await client.get(url, headers=headers)
@@ -319,7 +309,7 @@ async def task_manager(user_id: str, action: str, name: Optional[str] = None, ta
     Pour 'add' et 'update', les paramètres urgency/importance/etc. permettent de calculer le score de priorité (0-10)."""
     try:
         from memory_manager import MemoryManager
-        mm = MemoryManager()
+        mm = MemoryManager(db_path=DB_PATH)
         
         if action == "list":
             with mm.get_conn() as conn:
@@ -388,8 +378,6 @@ async def leave_bridge_note(title: str, content: str, category: str = "INFO") ->
     """Laisse une note dans le fichier pont (bridge) pour qu'Antoine puisse la lire dans l'application.
     Utilise cet outil pour signaler des tâches importantes, des bugs détectés, ou des idées à développer."""
     try:
-        from memory_manager import MemoryManager
-        mm = MemoryManager()
         with mm.get_conn() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
