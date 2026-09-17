@@ -1,12 +1,11 @@
 fastapi
 uvicorn
-gradio
-spaces
-torch
-transformers
-accelerate
+crewai[google-genai]
+crewai_tools
 python-dotenv
 pydantic
+langchain
+langchain-community
 google-genai
 sentence-transformers
 mcp

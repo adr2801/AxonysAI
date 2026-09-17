@@ -22,11 +22,14 @@ API_KEY = os.getenv("GEMINI_API_KEY")
 MEMORIES_DIR = os.path.join(BASE_DIR, "memories")
 BRIDGE_FILE = os.path.join(BASE_DIR, "jarvis_bridge.json")
 
+if not API_KEY:
+    raise ValueError("GEMINI_API_KEY non trouvée")
+
 if not os.path.exists(BRIDGE_FILE):
     with open(BRIDGE_FILE, 'w', encoding='utf-8') as f:
         json.dump([], f)
 
-client = genai.Client(api_key=API_KEY) if API_KEY else None
+client = genai.Client(api_key=API_KEY)
 memory_manager = MemoryManager(db_path=os.path.join(BASE_DIR, "jarvis_memory.db"))
 
 class UserContext:
@@ -40,89 +43,22 @@ class UserContext:
 context = UserContext()
 
 class JarvisEngine:
-    def __init__(self, model_name: Optional[str] = None):
-        # Priorité serveur : modèle Hugging Face local, puis fallback API.
-        self.use_local_model = os.getenv("USE_LOCAL_MODEL", "true").lower() in ("true", "1", "yes") or not API_KEY
-        self.local_model_id = os.getenv("LOCAL_MODEL_ID", "Qwen/Qwen2.5-14B-Instruct")
-        self.model_id = model_name or os.getenv("GEMINI_MODEL", "gemma-4-31b-it")
-        self.fallback_model_id = os.getenv("FALLBACK_MODEL", "gemma-4-26b-a4b-it")
+    def __init__(self, model_name="gemma-4-31b-it"):
+        self.model_id = model_name
+        self.fallback_model_id = "gemma-4-26b-a4b-it"
 
-        # Cache pour Transformers local
-        self._local_tokenizer = None
-        self._local_model = None
 
         self.sessions = {}
         self.sessions_configs = {}
         self.sessions_history = {}
         self.last_image_result = None
         self.last_sentiment = "CALM"
-
-    def _get_local_model(self):
-        """Charge le modèle Hugging Face Transformers localement sur le GPU (ZeroGPU)."""
-        if self._local_model is None:
-            import torch
-            from transformers import AutoModelForCausalLM, AutoTokenizer
-            print(f"🔄 Chargement du modèle local Transformers : {self.local_model_id}...")
-            self._local_tokenizer = AutoTokenizer.from_pretrained(self.local_model_id)
-            self._local_model = AutoModelForCausalLM.from_pretrained(
-                self.local_model_id,
-                torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
-                device_map="auto"
-            )
-            print(f"✅ Modèle local {self.local_model_id} prêt.")
-        return self._local_tokenizer, self._local_model
         
     def _run_async(self, coro):
         try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
-
-        if loop and loop.is_running():
-            import threading
-            from concurrent.futures import Future
-
-            res_future = Future()
-
-            def run_in_thread():
-                try:
-                    res = asyncio.run(coro)
-                    res_future.set_result(res)
-                except Exception as e:
-                    res_future.set_exception(e)
-
-            thread = threading.Thread(target=run_in_thread)
-            thread.start()
-            thread.join()
-            try:
-                return res_future.result()
-            except Exception as e:
-                return f"Erreur bridge : {str(e)}"
-        else:
-            try:
-                return asyncio.run(coro)
-            except Exception as e:
-                return f"Erreur bridge : {str(e)}"
-
-    async def _auto_save_memory(self, user_id: str, prompt: str, response_text: str, mode_id: str):
-        try:
-            fact = None
-            if "MÉMORISE ÇA :" in response_text:
-                parts = response_text.split("MÉMORISE ÇA :")
-                if len(parts) > 1:
-                    fact = parts[1].strip().split("\n")[0].strip()
-            elif "JE RETIENS :" in response_text:
-                parts = response_text.split("JE RETIENS :")
-                if len(parts) > 1:
-                    fact = parts[1].strip().split("\n")[0].strip()
-            
-            if fact:
-                fact = fact.strip('*_"` ')
-                if fact:
-                    memory_manager.save_fact(user_id, fact)
-                    print(f"💾 [Auto-Save] Fait enregistré pour {user_id} : '{fact}'")
+            return asyncio.run(coro)
         except Exception as e:
-            print(f"❌ [Auto-Save] Erreur lors de la sauvegarde automatique : {e}")
+            return f"Erreur bridge : {str(e)}"
 
     async def call_mcp_tool_async(self, name: str, arguments: dict) -> str:
         env = os.environ.copy()
@@ -162,9 +98,7 @@ class JarvisEngine:
         
         def memory_remember(fact: str): return self._run_async(mcp_server.memory_remember(context.user_id, fact))
         def memory_recall(query: str): return self._run_async(mcp_server.memory_recall(context.user_id, query))
-        def memory_set_preference(key: str, value: str): return self._run_async(mcp_server.memory_set_preference(context.user_id, key, value))
-        def memory_get_preferences(): return self._run_async(mcp_server.memory_get_preferences(context.user_id))
-
+        
         # Gmail
         def gmail_list(count: int = 5): return self._run_async(mcp_server.gmail_list(context.token, count))
         def gmail_get_content(message_id: str): return self._run_async(mcp_server.gmail_get_content(context.token, message_id))
@@ -182,13 +116,6 @@ class JarvisEngine:
         def send_notification(title: str, message: str): 
             context.pending_notifications.append({"title": title, "message": message, "timestamp": datetime.now().isoformat()})
             return self._run_async(mcp_server.send_notification(title, message))
-
-        def schedule_smart_reminder(title: str, message: str, scheduled_time: str):
-            return self._run_async(mcp_server.schedule_smart_reminder(context.user_id, title, message, scheduled_time))
-
-        def search_traffic(location: str): return self._run_async(mcp_server.search_traffic(location))
-        def send_to_dev(content: str, category: str = "NOTE"): return self._run_async(mcp_server.send_to_dev(content, category))
-
         def leave_bridge_note(title: str, content: str, category: str = "INFO"):
             """Laisse une note dans le fichier bridge (jarvis_bridge.json) destinée à l'IA de développement (Antigravity).
             Utilise cet outil quand tu détectes : un bug, une anomalie, une idée d'amélioration, ou une observation importante sur le comportement du système.
@@ -199,12 +126,10 @@ class JarvisEngine:
             return self._run_async(mcp_server.task_manager(context.user_id, action, name, task_id, status, urgency, importance, duration, envy, energy))
 
         return [
-            search_eye, search_deep_eye, listen_web, execute_python, read_project_file,
-            memory_remember, memory_recall, memory_set_preference, memory_get_preferences,
+            search_eye, search_deep_eye, listen_web, execute_python, read_project_file, memory_remember, memory_recall,
             gmail_list, gmail_get_content, gmail_send, gmail_delete,
             calendar_events, calendar_create, calendar_update, calendar_delete,
-            drive_search, send_notification, schedule_smart_reminder, search_traffic,
-            send_to_dev, leave_bridge_note, task_manager
+            drive_search, send_notification, leave_bridge_note, task_manager
         ]
 
 
@@ -299,9 +224,15 @@ Réponds TOUJOURS en français, de façon concise et élégante.
     def _append_to_history(self, session_id: str, role: str, content_parts: List[Any], thread_id: str = "main"):
         try:
             parts_json = json.dumps([{"text": p.text} for p in content_parts if hasattr(p, 'text') and p.text])
-            memory_manager.add_to_history(session_id, role, parts_json, thread_id)
+            with memory_manager.get_conn() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "INSERT INTO conversation_history (user_id, thread_id, role, content) VALUES (%s, %s, %s, %s)",
+                        (session_id, thread_id, role, parts_json)
+                    )
+                conn.commit()
         except Exception as e:
-            print(f"Erreur append historique: {e}")
+            print(f"Erreur append historique Supabase: {e}")
 
 
     async def _detect_mode(self, query: str) -> Optional[str]:
@@ -367,22 +298,20 @@ Réponds TOUJOURS en français, de façon concise et élégante.
             
         context.token, context.lat, context.lng = google_token, lat, lng
         context.user_id = user_id
-        full_id = f"{user_id}_{thread_id}"
-
-        # Contexte temporel et souvenirs
+        chat_session = await self._get_session(user_id, user_name, thread_id, mode)
+        
         now_paris = datetime.now(ZoneInfo("Europe/Paris"))
         date_str = now_paris.strftime("%A %d %B %Y, %H:%M")
         relevant_facts = memory_manager.get_relevant_facts(user_id, current_query=prompt, top_k=3)
-
+        
         context_parts = [f"Date actuelle: {date_str}"]
         if lat and lng: context_parts.append(f"Position GPS précise: {lat:.4f}, {lng:.4f}")
         if relevant_facts: context_parts.append("Souvenirs pertinents: " + " | ".join(relevant_facts))
-
+        
         geo_context = self._detect_context_from_location(lat, lng)
         sentiment_hint = self._analyze_sentiment(prompt)
         enriched_prompt = f"[CONTEXTE : {', '.join(context_parts)}]{geo_context}{sentiment_hint}\n\n{prompt}"
 
-        # Construction des parts du message
         message_parts = [types.Part(text=enriched_prompt)]
         if image_base64:
             import base64
@@ -390,48 +319,9 @@ Réponds TOUJOURS en français, de façon concise et élégante.
                 if "," in image_base64: image_base64 = image_base64.split(",")[1]
                 img_data = base64.b64decode(image_base64)
                 message_parts.append(types.Part(inline_data=types.Blob(mime_type="image/jpeg", data=img_data)))
-            except Exception as e: print(f"Erreur décodage image: {e}")
+            except: pass
 
-        # --- BRANCHE 1 : Modèle Local Transformers (Qwen / Gemma sur GPU) ---
-        if self.use_local_model:
-            try:
-                tokenizer, model = self._get_local_model()
-                messages = [
-                    {"role": "system", "content": f"Tu es JARVIS, le majordome IA d'{user_name}. {geo_context} {sentiment_hint}. Réponds en français de façon concise, précise et élégante."},
-                    {"role": "user", "content": enriched_prompt}
-                ]
-                text_input = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-                model_inputs = tokenizer([text_input], return_tensors="pt").to(model.device)
-                
-                from transformers import TextIteratorStreamer
-                streamer = TextIteratorStreamer(tokenizer, timeout=60.0, skip_prompt=True, skip_special_tokens=True)
-                
-                generate_kwargs = dict(
-                    **model_inputs,
-                    streamer=streamer,
-                    max_new_tokens=1024,
-                    do_sample=True,
-                    temperature=0.7,
-                    top_p=0.9
-                )
-                
-                t = threading.Thread(target=model.generate, kwargs=generate_kwargs, daemon=True)
-                t.start()
-                
-                full_text = ""
-                for new_text in streamer:
-                    full_text += new_text
-                    yield new_text
-                    
-                if save_to_history and full_text:
-                    self._append_to_history(user_id, "model", [types.Part(text=full_text)], thread_id)
-                return
-            except Exception as local_err:
-                print(f"⚠️ Erreur inférence locale : {local_err}. Tentative de repli API...")
-
-        # --- BRANCHE 2 : Modèle Cloud Google GenAI (Gemini / Gemma) ---
-        chat_session = await self._get_session(user_id, user_name, thread_id, mode)
-
+        full_id = f"{user_id}_{thread_id}"
         if save_to_history:
             user_content = types.Content(role="user", parts=message_parts)
             if full_id not in self.sessions_history: self.sessions_history[full_id] = []
@@ -439,6 +329,7 @@ Réponds TOUJOURS en français, de façon concise et élégante.
             self._append_to_history(user_id, "user", user_content.parts, thread_id)
 
         loop = asyncio.get_event_loop()
+        # Le streaming avec Gemini et auto_function_calling nécessite une itération sur le flux
         response_stream = await loop.run_in_executor(None, lambda: chat_session.send_message_stream(message_parts))
         
         queue = asyncio.Queue()
@@ -471,9 +362,6 @@ Réponds TOUJOURS en français, de façon concise et élégante.
             if chunk.text:
                 full_text += chunk.text
                 yield chunk.text
-
-        if not full_text:
-            raise RuntimeError("Le modèle serveur n'a produit aucune réponse.")
 
         if save_to_history and full_text:
             model_parts = [types.Part(text=full_text)]
@@ -580,7 +468,6 @@ Réponds TOUJOURS en français, de façon concise et élégante.
                     return f"Désolé Antoine, les serveurs de Google semblent saturés en ce moment (Erreur 500 persistante). Réessaye dans quelques instants. (Détail: {str(fallback_err)})"
 
             if "MÉMORISE ÇA :" in response_text or "JE RETIENS :" in response_text:
-                mode_id = f"{user_id}_{thread_id}_{mode}" if mode else f"{user_id}_{thread_id}"
                 asyncio.create_task(self._auto_save_memory(user_id, prompt, response_text, mode_id))
 
             if save_to_history:
